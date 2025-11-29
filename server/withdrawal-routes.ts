@@ -124,10 +124,9 @@ router.post('/request', requireAuth, async (req, res) => {
     const withdrawalResult = await storage.createWithdrawal({
       userId: req.user!.id,
       amount: amount.toString(),
-      currency: validatedData.currency,
       type: 'withdrawal',
       assetType: 'crypto',
-      symbol: 'USD',
+      symbol: 'USD', // Use symbol instead of currency
       price: '1',
       total: amount.toString(),
       status: 'pending_confirmation',
@@ -196,7 +195,7 @@ router.post('/confirm', requireAuth, async (req, res) => {
         to: req.user!.email,
         transactionType: 'withdrawal',
         amount: withdrawal.amount,
-        currency: withdrawal.currency,
+        currency: withdrawal.symbol,
         status: 'Under Review',
         transactionId: withdrawal.id
       });
@@ -316,7 +315,7 @@ router.post('/:id/reject', requireAuth, requireAdmin, async (req, res) => {
         to: user.email,
         transactionType: 'withdrawal',
         amount: updatedWithdrawal.amount,
-        currency: updatedWithdrawal.currency,
+        currency: updatedWithdrawal.symbol,
         status: 'Rejected',
         transactionId: id
       });
@@ -368,7 +367,7 @@ router.post('/:id/complete', requireAuth, requireAdmin, async (req, res) => {
         to: user.email,
         transactionType: 'withdrawal',
         amount: updatedWithdrawal.amount,
-        currency: updatedWithdrawal.currency,
+        currency: updatedWithdrawal.symbol,
         status: 'Completed',
         transactionId: id
       });
@@ -421,7 +420,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
         to: req.user!.email,
         transactionType: 'withdrawal',
         amount: updatedWithdrawal.amount,
-        currency: updatedWithdrawal.currency,
+        currency: updatedWithdrawal.symbol,
         status: 'Cancelled',
         transactionId: id
       });

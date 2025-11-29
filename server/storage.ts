@@ -353,23 +353,57 @@ export class DatabaseStorage {
   }
 
   async reverseTransaction(id: TransactionId, adminId: UserId, reason?: string) {
-    const transaction = await this.getTransaction(id);
-    if (!transaction) {
-      throw new Error('Transaction not found');
+    try {
+      // Start a transaction
+      await this.db.transaction(async (tx) => {
+        // Get the transaction with row-level locking to prevent race conditions
+        const [transaction] = await tx
+          .select()
+          .from(schema.transactions)
+          .where(eq(schema.transactions.id, id))
+          .for('update');
+
+        if (!transaction) {
+          throw new Error('Transaction not found');
+        }
+
+        // Check if already reversed
+        if (transaction.status === 'reversed') {
+          throw new Error('Transaction is already reversed');
+        }
+
+        // Update the transaction status
+        const [reversed] = await tx
+          .update(schema.transactions)
+          .set({ 
+            status: 'reversed',
+            updatedAt: new Date().toISOString() 
+          })
+          .where(eq(schema.transactions.id, id))
+          .returning();
+
+        // Create audit log
+        await tx.insert(schema.auditLogs).values({
+          adminId,
+          action: 'reverse_transaction',
+          targetId: id,
+          targetUserId: transaction.userId,
+          details: reason ? JSON.stringify({ reason }) : null,
+          timestamp: new Date()
+        });
+
+        return reversed;
+      });
+    } catch (error) {
+      // Log the error for debugging
+      console.error(`Error reversing transaction ${id}:`, error);
+      
+      // Re-throw with more context if needed
+      if (error instanceof Error) {
+        throw new Error(`Failed to reverse transaction: ${error.message}`);
+      }
+      throw new Error('Failed to reverse transaction due to an unexpected error');
     }
-    const reversed = await this.updateTransaction(id, {
-      status: 'reversed',
-      updatedAt: new Date().toISOString()
-    });
-    await this.createAuditLog({
-      adminId,
-      action: 'reverse_transaction',
-      targetId: id,
-      targetUserId: transaction.userId,
-      details: JSON.stringify({ reason }),
-      timestamp: new Date()
-    });
-    return reversed;
   }
 
   // ---------------- WATCHLIST ----------------
@@ -1076,9 +1110,53 @@ export class DatabaseStorage {
   }
 
   async getWithdrawalLimits(userId?: UserId) {
-    // Retrieve from platformSettings table
-    const limit = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'withdrawal_limit') });
-    return limit?.value || '1000';
+    // Get default limits from platform settings
+    const dailyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'daily_withdrawal_limit') });
+    const monthlyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'monthly_withdrawal_limit') });
+    
+    const dailyLimit = dailyLimitSetting?.value || '1000';
+    const monthlyLimit = monthlyLimitSetting?.value || '10000';
+    
+    if (!userId) {
+      return {
+        dailyLimit,
+        monthlyLimit,
+        dailyUsed: '0',
+        monthlyUsed: '0'
+      };
+    }
+    
+    // Calculate used amounts for the user
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const dailyWithdrawals = await this.db
+      .select({ amount: schema.transactions.amount })
+      .from(schema.transactions)
+      .where(and(
+        eq(schema.transactions.userId, userId),
+        eq(schema.transactions.type, 'withdrawal'),
+        gte(schema.transactions.createdAt, new Date(today.setHours(0, 0, 0, 0)))
+      ));
+    
+    const monthlyWithdrawals = await this.db
+      .select({ amount: schema.transactions.amount })
+      .from(schema.transactions)
+      .where(and(
+        eq(schema.transactions.userId, userId),
+        eq(schema.transactions.type, 'withdrawal'),
+        gte(schema.transactions.createdAt, startOfMonth)
+      ));
+    
+    const dailyUsed = dailyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
+    const monthlyUsed = monthlyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
+    
+    return {
+      dailyLimit,
+      monthlyLimit,
+      dailyUsed,
+      monthlyUsed
+    };
   }
 
   async setWithdrawalLimits(limit: number) {
@@ -1132,8 +1210,9 @@ export class DatabaseStorage {
   }
 
   async logAdminAction(data: Partial<typeof schema.adminActionLogs.$inferInsert>) {
+    const { timestamp, ...insertData } = data;
     const result = await this.db.insert(schema.adminActionLogs)
-      .values(data)
+      .values(insertData)
       .returning();
     return result[0];
   }
@@ -1237,27 +1316,17 @@ export class DatabaseStorage {
 
   async createAuditLog(data: Partial<typeof schema.auditLogs.$inferInsert>) {
     const result = await this.db.insert(schema.auditLogs)
-      .values({
-        ...data,
-        timestamp: data.timestamp ?? new Date()
-      })
+      .values(data)
       .returning();
     return result[0];
   }
 
   async getAuditLogs(limit = 200) {
     return this.db.query.auditLogs.findMany({
-      orderBy: desc(schema.auditLogs.timestamp),
-      limit
-    });
-  }
 
   async createSecurityLog(data: Partial<typeof schema.securityEvents.$inferInsert>) {
     const result = await this.db.insert(schema.securityEvents)
-      .values({
-        ...data,
-        timestamp: data.timestamp ?? new Date()
-      })
+      .values(data)
       .returning();
     return result[0];
   }
@@ -1270,8 +1339,7 @@ export class DatabaseStorage {
       userAgent: event.userAgent,
       endpoint: event.endpoint,
       severity: event.severity ?? 'medium',
-      details: event.details,
-      timestamp: new Date()
+      details: event.details
     });
   }
 

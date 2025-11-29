@@ -548,38 +548,29 @@ export class SupabaseAuthService {
       const users = await storage.getAllUsers();
       let existingUser = users.find(u => u.id === id);
       
-      // Fallback to email/phone lookup
+      // Fallback to email lookup
       if (!existingUser && email) {
         existingUser = await storage.getUserByEmail(email);
-      }
-      
-      if (!existingUser && phone) {
-        existingUser = users.find(u => u.phone === phone);
       }
 
       const userData = {
         email: email || '',
-        phone: phone || '',
         firstName: additionalData?.firstName || user_metadata?.first_name || user_metadata?.firstName || '',
         lastName: additionalData?.lastName || user_metadata?.last_name || user_metadata?.lastName || '',
-        username: additionalData?.username || user_metadata?.username || user_metadata?.preferred_username || email?.split('@')[0] || phone?.replace(/\D/g, '') || `user_${id.slice(-8)}`,
+        username: additionalData?.username || user_metadata?.username || user_metadata?.preferred_username || email?.split('@')[0] || `user_${id.slice(-8)}`,
         displayName: user_metadata?.full_name || user_metadata?.name || `${user_metadata?.first_name || ''} ${user_metadata?.last_name || ''}`.trim() || '',
         photoURL: user_metadata?.avatar_url || user_metadata?.picture || user_metadata?.photo || '',
-        provider: user_metadata?.provider || (phone ? 'phone' : 'email'),
+        provider: user_metadata?.provider || 'email',
         role: 'user' as const,
         isActive: true,
         walletBalance: '0',
         password: '', // Supabase manages passwords
-        emailVerified: !!email_confirmed_at,
-        phoneVerified: !!phone_confirmed_at,
       };
 
       if (existingUser) {
         // Update existing user, preserving existing verification status if already verified
         await storage.updateUser(existingUser.id, {
           ...userData,
-          emailVerified: !!email_confirmed_at || existingUser.emailVerified,
-          phoneVerified: !!phone_confirmed_at || existingUser.phoneVerified,
           // Preserve existing balance and other user data
           walletBalance: existingUser.walletBalance || '0',
         });

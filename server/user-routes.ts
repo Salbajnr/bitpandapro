@@ -114,7 +114,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response) => {
     
     // Create default settings if none exist
     if (!settings) {
-      settings = await storage.createUserSettings({
+      const settingsArray = await storage.createUserSettings({
         userId,
         preferredCurrency: 'USD',
         emailNotifications: true,
@@ -122,6 +122,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response) => {
         darkMode: false,
         language: 'en'
       });
+      settings = settingsArray[0];
     }
     
     res.json({
@@ -195,7 +196,7 @@ router.get('/notifications', requireAuth, async (req: Request, res: Response) =>
 router.patch('/notifications/:id/read', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await storage.markNotificationAsRead(id);
+    await storage.markNotificationAsRead(parseInt(id));
     res.json({ message: 'Notification marked as read' });
   } catch (error) {
     console.error('Mark notification error:', error);
