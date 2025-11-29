@@ -7,7 +7,7 @@
     "build": "tsc --noEmitOnError false",
     "build:prod": "tsc --noEmitOnError false --skipLibCheck",
     "dev": "cross-env NODE_ENV=development BACKEND_PORT=3000 NODE_OPTIONS=--max-old-space-size=4096 npx tsx watch index.ts",
-    "start": "npx tsx index.ts",
+    "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
