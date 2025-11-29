@@ -39,8 +39,7 @@ export function LoadingOverlay({ isLoading, message, progress }: LoadingOverlayP
               {progress !== undefined && (
                 <div className="w-full bg-muted rounded-full h-2">
                   <div 
-                    className="h-full bg-primary rounded-full progress-bar"
-                    style={{ '--progress-width': `${progress}%` } as React.CSSProperties}
+                    className={`h-full bg-primary rounded-full progress-bar progress-${Math.round(progress / 10) * 10}`}
                     role="progressbar"
                     aria-valuenow={progress}
                     aria-valuemin={0}

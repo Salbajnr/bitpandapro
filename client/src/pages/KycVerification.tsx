@@ -624,7 +624,7 @@ export default function KycVerification() {
                         <Icon className="h-6 w-6" />
                       )}
                     </div>
-                    <span className="text-xs mt-3 text-center font-medium" style={{ fontSize: '13px' }}>
+                    <span className="text-xs mt-3 text-center font-medium text-[13px]">
                       {step === 1 && 'Personal'}
                       {step === 2 && 'Address'}
                       {step === 3 && 'Document'}
