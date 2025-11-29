@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
+
 import DashboardLayout from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
@@ -9,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+
 import {
   Wallet,
   TrendingUp,
@@ -34,6 +37,39 @@ import {
 } from "lucide-react";
 import { Link, useLocation, useRoute } from "wouter";
 import { Redirect } from "wouter";
+
+const simulatedCandles = [
+  { heightClass: "h-[35%]", trend: "down" },
+  { heightClass: "h-[45%]", trend: "up" },
+  { heightClass: "h-[55%]", trend: "up" },
+  { heightClass: "h-[40%]", trend: "down" },
+  { heightClass: "h-[60%]", trend: "up" },
+  { heightClass: "h-[50%]", trend: "down" },
+  { heightClass: "h-[65%]", trend: "up" },
+  { heightClass: "h-[42%]", trend: "down" },
+  { heightClass: "h-[58%]", trend: "up" },
+  { heightClass: "h-[48%]", trend: "down" },
+  { heightClass: "h-[70%]", trend: "up" },
+  { heightClass: "h-[52%]", trend: "down" },
+  { heightClass: "h-[62%]", trend: "up" },
+  { heightClass: "h-[46%]", trend: "down" },
+  { heightClass: "h-[68%]", trend: "up" },
+  { heightClass: "h-[54%]", trend: "down" },
+  { heightClass: "h-[72%]", trend: "up" },
+  { heightClass: "h-[44%]", trend: "down" },
+  { heightClass: "h-[64%]", trend: "up" },
+  { heightClass: "h-[38%]", trend: "down" },
+  { heightClass: "h-[66%]", trend: "up" },
+  { heightClass: "h-[52%]", trend: "down" },
+  { heightClass: "h-[74%]", trend: "up" },
+  { heightClass: "h-[42%]", trend: "down" },
+  { heightClass: "h-[60%]", trend: "up" },
+  { heightClass: "h-[48%]", trend: "down" },
+  { heightClass: "h-[70%]", trend: "up" },
+  { heightClass: "h-[55%]", trend: "down" },
+  { heightClass: "h-[68%]", trend: "up" },
+  { heightClass: "h-[40%]", trend: "down" },
+];
 
 // Get navigate function
 function useNavigation() {
@@ -289,12 +325,10 @@ export default function Dashboard() {
           <div className="mt-4 flex justify-center space-x-1">
             <div className="w-2 h-2 bg-[#00cc88] rounded-full animate-bounce"></div>
             <div
-              className="w-2 h-2 bg-[#00cc88] rounded-full animate-bounce"
-              style={{ animationDelay: "0.1s" }}
+              className="w-2 h-2 bg-[#00cc88] rounded-full animate-bounce delay-100"
             ></div>
             <div
-              className="w-2 h-2 bg-[#00cc88] rounded-full animate-bounce"
-              style={{ animationDelay: "0.2s" }}
+              className="w-2 h-2 bg-[#00cc88] rounded-full animate-bounce delay-200"
             ></div>
           </div>
         </div>
@@ -351,172 +385,21 @@ export default function Dashboard() {
       <div className="lg:pl-64">
         {/* Bitpanda-Style Clean Header */}
         <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900 dark:text-white" style={{ fontFamily: 'Inter, sans-serif' }}>Dashboard</h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Overview of your portfolio and market activity</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-0 px-3 py-1.5 font-medium">
-                <Activity className="h-3.5 w-3.5 mr-1.5" />
-                Live
-              </Badge>
+          <div className="px-6 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900 dark:text-white font-inter">Dashboard</h1>
+
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Overview of your portfolio and market activity</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-0 px-3 py-1.5 font-medium">
+                  <Activity className="h-3.5 w-3.5 mr-1.5" />
+                  Live
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="pb-20 bg-slate-50 dark:bg-slate-900">
-        {/* Bitpanda-Style Portfolio Overview */}
-        <div className="px-6 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-            {/* Total Portfolio Value - Bitpanda Style */}
-            <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Portfolio Value</span>
-                  <Wallet className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-2xl font-semibold text-slate-900 dark:text-white">
-                    {showBalance ? `€${portfolioValue}` : "••••••"}
-                  </span>
-                  <button onClick={() => setShowBalance(!showBalance)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                    {showBalance ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                  </button>
-                </div>
-                <div className="flex items-center gap-1">
-                  {portfolioChange >= 0 ? (
-                    <TrendingUp className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                  ) : (
-                    <TrendingDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-                  )}
-                  <span className={`text-sm font-medium ${portfolioChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {portfolioChange >= 0 ? '+' : ''}{portfolioChange.toFixed(2)}%
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">24h</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Available Balance - Bitpanda Style */}
-            <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Available Cash</span>
-                  <DollarSign className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="text-2xl font-semibold text-slate-900 dark:text-white mb-1">€{availableBalance}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Ready to invest</div>
-              </CardContent>
-            </Card>
-
-            {/* Total P&L - Bitpanda Style */}
-            <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total P&L</span>
-                  <BarChart3 className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className={`text-2xl font-semibold mb-1 ${dayChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {dayChange >= 0 ? '+' : ''}€{Math.abs(dayChange).toFixed(2)}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Since yesterday</div>
-              </CardContent>
-            </Card>
-
-            {/* Active Positions - Bitpanda Style */}
-            <Card className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Active Positions</span>
-                  <Activity className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="text-2xl font-semibold text-slate-900 dark:text-white mb-1">
-                  {portfolioData?.holdings?.length || 0}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Assets held</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Professional Trading Chart */}
-        <div className="px-6 mb-6">
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader className="border-b border-slate-700">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-white">Portfolio Performance</CardTitle>
-                <div className="flex items-center gap-2">
-                  {["1H", "24H", "7D", "30D", "1Y"].map((period) => (
-                    <button
-                      key={period}
-                      onClick={() => setSelectedTimeframe(period)}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                        selectedTimeframe === period
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
-                    >
-                      {period}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="h-64 bg-slate-900 rounded-lg relative overflow-hidden">
-                {/* Simulated candlestick chart background */}
-                <div className="absolute inset-0 flex items-end justify-around p-4">
-                  {Array.from({ length: 30 }).map((_, i) => {
-                    const height = Math.random() * 80 + 20;
-                    const isPositive = Math.random() > 0.5;
-                    return (
-                      <div
-                        key={i}
-                        className={`w-2 ${isPositive ? 'bg-green-500' : 'bg-red-500'} opacity-60 hover:opacity-100 transition-opacity`}
-                        style={{ height: `${height}%` }}
-                      />
-                    );
-                  })}
-                </div>
-                {/* Price line overlay */}
-                <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-                  <polyline
-                    points="0,120 50,110 100,125 150,105 200,115 250,95 300,110 350,90 400,105 450,85 500,95 550,75 600,85 650,70 700,80 750,65 800,75"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                  <polyline
-                    points="0,120 50,110 100,125 150,105 200,115 250,95 300,110 350,90 400,105 450,85 500,95 550,75 600,85 650,70 700,80 750,65 800,75 800,300 0,300"
-                    fill="url(#gradient)"
-                    opacity="0.3"
-                  />
-                  <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                {/* Grid lines */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="border-t border-slate-700/50" />
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-between mt-4 text-xs text-slate-400">
-                <span>Low: €{(parseFloat(portfolioValue) * 0.95).toFixed(2)}</span>
-                <span>High: €{(parseFloat(portfolioValue) * 1.05).toFixed(2)}</span>
-                <span>Vol: €{(parseFloat(portfolioValue) * 2.3).toFixed(2)}</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Bitpanda-Style Quick Actions */}
@@ -796,7 +679,7 @@ export default function Dashboard() {
                         key={mover.id}
                         className="flex items-center justify-between p-4 hover:bg-slate-700/50 transition-colors cursor-pointer"
                         data-testid={`mover-card-${mover.symbol}`}
-                        onClick={() => setLocation(`/trading?symbol=${mover.symbol}`)}
+                        onClick={() => navigate(`/trading?symbol=${mover.symbol}`)}
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-slate-500 font-mono text-sm">#{index + 1}</div>
@@ -826,7 +709,7 @@ export default function Dashboard() {
                         key={mover.id}
                         className="flex items-center justify-between p-4 hover:bg-slate-700/50 transition-colors cursor-pointer"
                         data-testid={`mover-card-${mover.symbol}`}
-                        onClick={() => setLocation(`/trading?symbol=${mover.symbol}`)}
+                        onClick={() => navigate(`/trading?symbol=${mover.symbol}`)}
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-slate-500 font-mono text-sm">#{index + 1}</div>

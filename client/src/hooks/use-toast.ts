@@ -1,6 +1,8 @@
 
 import * as React from "react"
 
+export type ToastVariant = "default" | "destructive"
+
 export interface Toast {
   id: string
   title?: React.ReactNode
@@ -8,6 +10,7 @@ export interface Toast {
   action?: React.ReactElement
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  variant?: ToastVariant
 }
 
 const TOAST_LIMIT = 1
