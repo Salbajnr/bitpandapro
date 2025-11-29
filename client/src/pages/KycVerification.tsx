@@ -158,59 +158,58 @@ export default function KycVerification() {
     };
 
     return (
-      <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'Inter, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+      <div className="min-h-screen bg-slate-50 font-inter">
         <div className="max-w-4xl mx-auto p-6 space-y-8">
           {/* Header */}
           <div className="text-center space-y-2">
-            <h1 className="text-4xl font-bold text-slate-900" style={{ fontWeight: 700, letterSpacing: '-0.4px' }}>
+            <h1 className="text-4xl font-bold text-slate-900 tracking-tight-negative">
               Verification Status
             </h1>
-            <p className="text-lg text-slate-600" style={{ fontWeight: 400 }}>
+            <p className="text-lg text-slate-600 font-normal">
               Your identity verification details
             </p>
           </div>
 
           {/* Status Card */}
-          <Card className="bg-white border-0 shadow-lg" style={{ borderRadius: '8px' }}>
-            <CardHeader className="text-center pb-6" style={{ padding: '32px' }}>
+          <Card className="bg-white border-0 shadow-lg rounded-lg">
+            <CardHeader className="text-center pb-6 p-8">
               <div className="flex justify-center mb-6">
                 {getStatusIcon()}
               </div>
-              <CardTitle className="text-2xl mb-4" style={{ fontWeight: 600 }}>
+              <CardTitle className="text-2xl mb-4 font-semibold">
                 <Badge 
-                  className={`text-lg px-6 py-3 ${
+                  className={`text-lg px-6 py-3 rounded-3xl font-medium ${
                     existingKyc.status === 'approved' ? 'bg-green-500 hover:bg-green-600' : 
                     existingKyc.status === 'rejected' ? 'bg-red-500 hover:bg-red-600' : 
                     'bg-green-500 hover:bg-green-600'
                   }`}
-                  style={{ borderRadius: '24px', fontWeight: 500 }}
                 >
                   {existingKyc.status?.toUpperCase().replace('_', ' ')}
                 </Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent style={{ padding: '0 32px 32px 32px' }}>
-              <div className="text-center text-slate-600 mb-8" style={{ fontSize: '17px', lineHeight: '1.4' }}>
+            <CardContent className="px-8 pb-8">
+              <div className="text-center text-slate-600 mb-8 text-[17px] leading-relaxed">
                 <p>{getStatusMessage()}</p>
               </div>
 
               {existingKyc.rejectionReason && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6" style={{ borderRadius: '8px' }}>
-                  <h3 className="font-semibold text-red-800 mb-3" style={{ fontSize: '17px', fontWeight: 600 }}>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+                  <h3 className="font-semibold text-red-800 mb-3 text-[17px]">
                     Rejection Reason:
                   </h3>
-                  <p className="text-red-700" style={{ fontSize: '15px', lineHeight: '1.4' }}>
+                  <p className="text-red-700 text-[15px] leading-relaxed">
                     {existingKyc.rejectionReason}
                   </p>
                 </div>
               )}
 
               {existingKyc.notes && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6" style={{ borderRadius: '8px' }}>
-                  <h3 className="font-semibold text-blue-800 mb-3" style={{ fontSize: '17px', fontWeight: 600 }}>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                  <h3 className="font-semibold text-blue-800 mb-3 text-[17px]">
                     Admin Notes:
                   </h3>
-                  <p className="text-blue-700" style={{ fontSize: '15px', lineHeight: '1.4' }}>
+                  <p className="text-blue-700 text-[15px] leading-relaxed">
                     {existingKyc.notes}
                   </p>
                 </div>
@@ -218,22 +217,22 @@ export default function KycVerification() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm mb-8">
                 <div className="space-y-1">
-                  <Label className="text-slate-500" style={{ fontSize: '13px', fontWeight: 500 }}>Submitted Date</Label>
-                  <p className="font-medium text-slate-900" style={{ fontSize: '15px' }}>{new Date(existingKyc.createdAt).toLocaleDateString()}</p>
+                  <Label className="text-slate-500 text-[13px] font-medium">Submitted Date</Label>
+                  <p className="font-medium text-slate-900 text-[15px]">{new Date(existingKyc.createdAt).toLocaleDateString()}</p>
                 </div>
                 {existingKyc.reviewedAt && (
                   <div className="space-y-1">
-                    <Label className="text-slate-500" style={{ fontSize: '13px', fontWeight: 500 }}>Reviewed Date</Label>
-                    <p className="font-medium text-slate-900" style={{ fontSize: '15px' }}>{new Date(existingKyc.reviewedAt).toLocaleDateString()}</p>
+                    <Label className="text-slate-500 text-[13px] font-medium">Reviewed Date</Label>
+                    <p className="font-medium text-slate-900 text-[15px]">{new Date(existingKyc.reviewedAt).toLocaleDateString()}</p>
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-slate-500" style={{ fontSize: '13px', fontWeight: 500 }}>Document Type</Label>
-                  <p className="font-medium text-slate-900" style={{ fontSize: '15px' }}>{existingKyc.documentType?.replace('_', ' ').toUpperCase()}</p>
+                  <Label className="text-slate-500 text-[13px] font-medium">Document Type</Label>
+                  <p className="font-medium text-slate-900 text-[15px]">{existingKyc.documentType?.replace('_', ' ').toUpperCase()}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-slate-500" style={{ fontSize: '13px', fontWeight: 500 }}>Document Number</Label>
-                  <p className="font-medium text-slate-900" style={{ fontSize: '15px' }}>***{existingKyc.documentNumber?.slice(-4)}</p>
+                  <Label className="text-slate-500 text-[13px] font-medium">Document Number</Label>
+                  <p className="font-medium text-slate-900 text-[15px]">***{existingKyc.documentNumber?.slice(-4)}</p>
                 </div>
               </div>
 
@@ -241,8 +240,7 @@ export default function KycVerification() {
                 <div className="flex justify-center">
                   <Button 
                     onClick={() => setCurrentStep(1)}
-                    className="bg-green-500 hover:bg-green-600 text-white px-8 py-3"
-                    style={{ borderRadius: '8px', fontWeight: 500, fontSize: '15px' }}
+                    className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg font-medium text-[15px]"
                     data-testid="button-resubmit-kyc"
                   >
                     Resubmit Verification
@@ -463,13 +461,12 @@ export default function KycVerification() {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="documentType" style={{ fontSize: '15px', fontWeight: 500, color: '#374151' }}>Document Type *</Label>
+              <Label htmlFor="documentType" className="text-[15px] font-medium text-gray-700">Document Type *</Label>
               <select
                 id="documentType"
                 value={kycData.documentType}
                 onChange={(e) => handleInputChange('documentType', e.target.value)}
-                className="w-full h-12 px-4 border border-slate-300 bg-white rounded-lg text-slate-900 focus:border-green-500 focus:ring-green-500"
-                style={{ borderRadius: '8px', fontSize: '15px' }}
+                className="w-full h-12 px-4 border border-slate-300 bg-white rounded-lg text-slate-900 focus:border-green-500 focus:ring-green-500 text-[15px]"
                 aria-label="Document type selection"
                 data-testid="select-document-type"
               >
@@ -480,23 +477,22 @@ export default function KycVerification() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="documentNumber" style={{ fontSize: '15px', fontWeight: 500, color: '#374151' }}>Document Number *</Label>
+              <Label htmlFor="documentNumber" className="text-[15px] font-medium text-gray-700">Document Number *</Label>
               <Input
                 id="documentNumber"
                 value={kycData.documentNumber}
                 onChange={(e) => handleInputChange('documentNumber', e.target.value)}
                 placeholder="Enter your document number"
-                className="h-12 border-slate-300 focus:border-green-500 focus:ring-green-500"
-                style={{ borderRadius: '8px', fontSize: '15px' }}
+                className="h-12 border-slate-300 focus:border-green-500 focus:ring-green-500 rounded-lg text-[15px]"
                 data-testid="input-document-number"
               />
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6" style={{ borderRadius: '8px' }}>
-              <h3 className="font-semibold text-blue-800 mb-3" style={{ fontSize: '17px', fontWeight: 600 }}>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h3 className="font-semibold text-blue-800 mb-3 text-[17px]">
                 Document Requirements:
               </h3>
-              <ul className="text-blue-700 space-y-2" style={{ fontSize: '15px', lineHeight: '1.4' }}>
+              <ul className="text-blue-700 space-y-2 text-[15px] leading-relaxed">
                 <li>• Document must be government-issued</li>
                 <li>• Clear, high-resolution photos</li>
                 <li>• All text must be legible</li>
@@ -511,8 +507,8 @@ export default function KycVerification() {
         return (
           <div className="space-y-8">
             <div className="text-center">
-              <h3 className="text-xl font-semibold mb-4" style={{ fontWeight: 600 }}>Document Upload</h3>
-              <p className="text-slate-600 mb-8" style={{ fontSize: '15px', lineHeight: '1.4' }}>
+              <h3 className="text-xl font-semibold mb-4 font-semibold">Document Upload</h3>
+              <p className="text-slate-600 mb-8 text-[15px] leading-relaxed">
                 Upload clear photos of your documents. In a real implementation, 
                 this would include file upload functionality.
               </p>
@@ -522,7 +518,7 @@ export default function KycVerification() {
               <Card className="border-2 border-dashed border-slate-300 hover:border-green-500 transition-colors">
                 <CardContent className="p-8 text-center">
                   <FileTextIcon className="h-12 w-12 mx-auto mb-4 text-slate-400" />
-                  <h4 className="font-medium mb-4" style={{ fontSize: '15px', fontWeight: 500 }}>Document Front</h4>
+                  <h4 className="font-medium mb-4 text-[15px] font-medium">Document Front</h4>
                   <Button variant="outline" size="sm" className="border-green-500 text-green-600 hover:bg-green-50" data-testid="button-upload-front">
                     <UploadIcon className="h-4 w-4 mr-2" />
                     Upload
@@ -534,7 +530,7 @@ export default function KycVerification() {
                 <Card className="border-2 border-dashed border-slate-300 hover:border-green-500 transition-colors">
                   <CardContent className="p-8 text-center">
                     <FileTextIcon className="h-12 w-12 mx-auto mb-4 text-slate-400" />
-                    <h4 className="font-medium mb-4" style={{ fontSize: '15px', fontWeight: 500 }}>Document Back</h4>
+                    <h4 className="font-medium mb-4 text-[15px] font-medium">Document Back</h4>
                     <Button variant="outline" size="sm" className="border-green-500 text-green-600 hover:bg-green-50" data-testid="button-upload-back">
                       <UploadIcon className="h-4 w-4 mr-2" />
                       Upload
@@ -546,7 +542,7 @@ export default function KycVerification() {
               <Card className="border-2 border-dashed border-slate-300 hover:border-green-500 transition-colors">
                 <CardContent className="p-8 text-center">
                   <CameraIcon className="h-12 w-12 mx-auto mb-4 text-slate-400" />
-                  <h4 className="font-medium mb-4" style={{ fontSize: '15px', fontWeight: 500 }}>Selfie Photo</h4>
+                  <h4 className="font-medium mb-4 text-[15px] font-medium">Selfie Photo</h4>
                   <Button variant="outline" size="sm" className="border-green-500 text-green-600 hover:bg-green-50" data-testid="button-upload-selfie">
                     <UploadIcon className="h-4 w-4 mr-2" />
                     Upload
@@ -578,36 +574,36 @@ export default function KycVerification() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'Inter, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+    <div className="min-h-screen bg-slate-50 font-inter">
       <div className="max-w-4xl mx-auto p-6 space-y-8">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-slate-900" style={{ fontWeight: 700, letterSpacing: '-0.4px' }}>
+          <h1 className="text-4xl font-bold text-slate-900 tracking-tight-negative">
             Identity Verification
           </h1>
-          <p className="text-lg text-slate-600" style={{ fontWeight: 400 }}>
+          <p className="text-lg text-slate-600 font-normal">
             Complete your identity verification to access all platform features
           </p>
         </div>
 
         {/* Progress Card */}
-        <Card className="bg-white border-0 shadow-lg" style={{ borderRadius: '8px' }}>
-          <CardHeader style={{ padding: '32px 32px 24px 32px' }}>
+        <Card className="bg-white border-0 shadow-lg rounded-lg">
+          <CardHeader className="px-8 py-6 pb-6">
             <div className="flex items-center justify-between mb-6">
-              <CardTitle className="flex items-center gap-3" style={{ fontSize: '24px', fontWeight: 600 }}>
+              <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                   <ShieldCheckIcon className="h-5 w-5 text-green-600" />
                 </div>
                 Identity Verification
               </CardTitle>
-              <Badge variant="outline" className="px-4 py-2" style={{ borderRadius: '24px', fontSize: '13px' }}>
+              <Badge variant="outline" className="px-4 py-2 rounded-3xl text-[13px]">
                 Step {currentStep} of 4
               </Badge>
             </div>
-            <Progress value={(currentStep / 4) * 100} className="w-full h-2" style={{ borderRadius: '4px' }} />
+            <Progress value={(currentStep / 4) * 100} className="w-full h-2 rounded-sm" />
           </CardHeader>
           
-          <CardContent style={{ padding: '0 32px 32px 32px' }}>
+          <CardContent className="px-8 pb-8">
             {/* Step indicators */}
             <div className="flex justify-between items-center mb-8">
               {[1, 2, 3, 4].map((step) => {

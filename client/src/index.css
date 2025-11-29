@@ -168,3 +168,8 @@
   transition: width 0.3s ease-in-out;
   width: var(--progress-width, 0%);
 }
+
+/* Letter spacing utilities */
+.tracking-tight-negative {
+  letter-spacing: -0.4px;
+}
