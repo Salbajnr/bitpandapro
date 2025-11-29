@@ -36,6 +36,9 @@ interface KycData {
   status?: 'pending' | 'under_review' | 'approved' | 'rejected';
   rejectionReason?: string;
   notes?: string;
+  createdAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 export default function KycVerification() {
@@ -58,7 +61,7 @@ export default function KycVerification() {
     documentNumber: ''
   });
 
-  const { data: existingKyc, isLoading } = useQuery({
+  const { data: existingKyc, isLoading } = useQuery<KycData>({
     queryKey: ["/api/kyc/status"],
     retry: false,
     enabled: !!user,
@@ -69,13 +72,13 @@ export default function KycVerification() {
 
   const submitKycMutation = useMutation({
     mutationFn: (data: KycData) =>
-      apiRequest('/api/kyc/submit', { 
-        method: 'POST', 
-        body: {
+      apiRequest('/api/kyc/submit', {
+        method: 'POST',
+        body: JSON.stringify({
           ...data,
           documentFrontImageUrl: 'placeholder-front.jpg',
           selfieImageUrl: 'placeholder-selfie.jpg'
-        }
+        })
       }),
     onSuccess: () => {
       toast({
@@ -95,9 +98,9 @@ export default function KycVerification() {
 
   const updateKycMutation = useMutation({
     mutationFn: (data: Partial<KycData>) =>
-      apiRequest('/api/kyc/update', { 
-        method: 'PATCH', 
-        body: data 
+      apiRequest('/api/kyc/update', {
+        method: 'PATCH',
+        body: JSON.stringify(data)
       }),
     onSuccess: () => {
       toast({
