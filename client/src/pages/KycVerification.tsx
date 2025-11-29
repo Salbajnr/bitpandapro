@@ -467,6 +467,7 @@ export default function KycVerification() {
                 onChange={(e) => handleInputChange('documentType', e.target.value)}
                 className="w-full h-12 px-4 border border-slate-300 bg-white rounded-lg text-slate-900 focus:border-green-500 focus:ring-green-500"
                 style={{ borderRadius: '8px', fontSize: '15px' }}
+                aria-label="Document type selection"
                 data-testid="select-document-type"
               >
                 <option value="passport">Passport</option>

@@ -162,3 +162,9 @@
 .animate-scroll:hover {
   animation-play-state: paused;
 }
+
+/* Dynamic progress bar width utility */
+.progress-bar {
+  transition: width 0.3s ease-in-out;
+  width: var(--progress-width, 0%);
+}

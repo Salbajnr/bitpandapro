@@ -739,6 +739,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom Navigation */}
+      <div className="lg:hidden">
         <BottomNavigation />
       </div>
     </div>
