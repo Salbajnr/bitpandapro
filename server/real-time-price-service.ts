@@ -1,0 +1,280 @@
+import { EventEmitter } from 'events';
+import { WebSocketServer, WebSocket } from 'ws';
+import { cryptoService, type CryptoPrice } from './crypto-service';
+
+interface PriceSubscription {
+  ws: WebSocket;
+  symbols: string[];
+  userId?: string;
+  lastUpdate?: number;
+}
+
+interface PriceUpdate {
+  symbol: string;
+  price: number;
+  change_24h: number;
+  volume_24h: number;
+  market_cap: number;
+  timestamp: number;
+  lastUpdated?: number; // Added for caching logic
+}
+
+class RealTimePriceService extends EventEmitter {
+  private subscriptions = new Map<string, PriceSubscription>();
+  private priceCache = new Map<string, PriceUpdate>();
+  private updateInterval: NodeJS.Timeout | null = null;
+  private readonly UPDATE_FREQUENCY = 15000; // 15 seconds for more responsive updates
+  private isRunning = false;
+  private cacheTimeout = 60000; // 60 seconds - increased to reduce API calls
+  private lastFetchTime: Map<string, number> = new Map();
+
+
+  constructor() {
+    super();
+    this.setMaxListeners(100);
+  }
+
+  start() {
+    if (this.isRunning) return;
+
+    console.log('🚀 Starting Real-Time Price Service with live data...');
+    this.isRunning = true;
+    this.startPriceUpdates();
+  }
+
+  stop() {
+    if (!this.isRunning) return;
+
+    console.log('🛑 Stopping Real-Time Price Service...');
+    this.isRunning = false;
+
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+
+    this.subscriptions.clear();
+    this.priceCache.clear();
+  }
+
+  addSubscription(clientId: string, ws: WebSocket, symbols: string[], userId?: string) {
+    this.subscriptions.set(clientId, {
+      ws,
+      symbols: symbols.map(s => s.toLowerCase()),
+      userId,
+      lastUpdate: Date.now()
+    });
+
+    console.log(`📊 Client ${clientId} subscribed to: ${symbols.join(', ')}`);
+
+    // Send immediate price update for subscribed symbols
+    this.sendInitialPrices(clientId, symbols);
+  }
+
+  removeSubscription(clientId: string) {
+    if (this.subscriptions.delete(clientId)) {
+      console.log(`📊 Client ${clientId} unsubscribed`);
+    }
+  }
+
+  private async sendInitialPrices(clientId: string, symbols: string[]) {
+    const subscription = this.subscriptions.get(clientId);
+    if (!subscription || subscription.ws.readyState !== WebSocket.OPEN) return;
+
+    try {
+      const prices = await cryptoService.getPrices(symbols);
+      const updates: PriceUpdate[] = prices.map(price => ({
+        symbol: price.symbol.toLowerCase(),
+        price: price.price,
+        change_24h: price.change_24h,
+        volume_24h: price.volume_24h,
+        market_cap: price.market_cap,
+        timestamp: Date.now(),
+        lastUpdated: Date.now() // Set lastUpdated for caching
+      }));
+
+      this.sendToClient(subscription.ws, {
+        type: 'price_update',
+        data: updates,
+        timestamp: Date.now()
+      });
+
+      // Cache the prices
+      updates.forEach(update => {
+        this.priceCache.set(update.symbol, update);
+      });
+
+    } catch (error) {
+      console.error('Error sending initial prices:', error);
+    }
+  }
+
+  private startPriceUpdates() {
+    // Start HTTP-based price updates
+    this.updateInterval = setInterval(async () => {
+      await this.updatePrices();
+    }, this.UPDATE_FREQUENCY);
+
+    // Initial update
+    setTimeout(() => this.updatePrices(), 1000);
+
+    console.log('⚡ Real-time price updates started (HTTP mode)');
+  }
+
+  private async updatePrices() {
+    if (this.subscriptions.size === 0) return;
+
+    // Get all unique symbols from subscriptions
+    const allSymbols = new Set<string>();
+    this.subscriptions.forEach(sub => {
+      sub.symbols.forEach(symbol => allSymbols.add(symbol));
+    });
+
+    if (allSymbols.size === 0) return;
+
+    try {
+      const symbolsArray = Array.from(allSymbols);
+      const prices = await cryptoService.getPrices(symbolsArray);
+
+      const updates: PriceUpdate[] = prices.map(price => ({
+        symbol: price.symbol.toLowerCase(),
+        price: price.price,
+        change_24h: price.change_24h,
+        volume_24h: price.volume_24h,
+        market_cap: price.market_cap,
+        timestamp: Date.now(),
+        lastUpdated: Date.now() // Set lastUpdated for caching
+      }));
+
+      // Update cache and broadcast to clients
+      updates.forEach(update => {
+        this.priceCache.set(update.symbol, update);
+        this.broadcastPriceUpdate(update);
+      });
+
+      console.log(`📊 Updated prices for ${updates.length} symbols`);
+    } catch (error) {
+      console.error('Error updating prices:', error);
+    }
+  }
+
+  private broadcastPriceUpdate(update: PriceUpdate) {
+    const message = {
+      type: 'price_update',
+      data: [update],
+      timestamp: update.timestamp
+    };
+
+    this.subscriptions.forEach((subscription, clientId) => {
+      if (subscription.symbols.includes(update.symbol)) {
+        if (subscription.ws.readyState === WebSocket.OPEN) {
+          this.sendToClient(subscription.ws, message);
+        } else {
+          // Clean up dead connections
+          this.removeSubscription(clientId);
+        }
+      }
+    });
+
+    // Emit event for other services
+    this.emit('priceUpdate', update);
+  }
+
+  private sendToClient(ws: WebSocket, message: any) {
+    try {
+      ws.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('Error sending message to client:', error);
+    }
+  }
+
+  // Public methods for other services
+  getPrice(symbol: string): PriceUpdate | null {
+    const lowerCaseSymbol = symbol.toLowerCase();
+    const cached = this.priceCache.get(lowerCaseSymbol);
+
+    if (cached && Date.now() - (cached.lastUpdated || 0) < this.cacheTimeout) { // Use cacheTimeout
+      return cached;
+    }
+
+    // Return cached data even if stale, or fallback
+    return cached || this.getFallbackPrice(lowerCaseSymbol);
+  }
+
+  getAllPrices(): PriceUpdate[] {
+    return Array.from(this.priceCache.values());
+  }
+
+  getActiveSymbols(): string[] {
+    return Array.from(this.priceCache.keys());
+  }
+
+  getSubscriptionCount(): number {
+    return this.subscriptions.size;
+  }
+
+  // Fallback method to provide default/mock data if real data isn't available
+  private getFallbackPrice(symbol: string): PriceUpdate {
+    console.warn(`⚠️ Using fallback price for ${symbol}`);
+    // You can implement a more sophisticated fallback, e.g., using historical averages or a default value
+    return {
+      symbol: symbol,
+      price: 0, // Default price
+      change_24h: 0,
+      volume_24h: 0,
+      market_cap: 0,
+      timestamp: Date.now(),
+      lastUpdated: Date.now()
+    };
+  }
+
+  // Method to fetch price data, with caching and throttling
+  async fetchPriceData(symbol: string): Promise<PriceUpdate> {
+    const lowerCaseSymbol = symbol.toLowerCase();
+    const now = Date.now();
+
+    // Check cache first
+    const cachedData = this.priceCache.get(lowerCaseSymbol);
+    if (cachedData && now - (cachedData.lastUpdated || 0) < this.cacheTimeout) {
+      return cachedData;
+    }
+
+    // Check if we fetched recently (within 10 seconds) to throttle
+    const lastFetch = this.lastFetchTime.get(lowerCaseSymbol);
+    if (lastFetch && now - lastFetch < 10000) {
+      // If fetched recently and still stale, return cached (even if stale) or fallback
+      return cachedData || this.getFallbackPrice(lowerCaseSymbol);
+    }
+
+    this.lastFetchTime.set(lowerCaseSymbol, now); // Record the fetch time
+
+    try {
+      // Fetch from the service
+      const priceDataArray = await cryptoService.getPrices([lowerCaseSymbol]);
+      if (priceDataArray.length === 0) {
+        throw new Error(`No price data found for symbol: ${lowerCaseSymbol}`);
+      }
+      const priceData = priceDataArray[0];
+
+      const update: PriceUpdate = {
+        symbol: priceData.symbol.toLowerCase(),
+        price: priceData.price,
+        change_24h: priceData.change_24h,
+        volume_24h: priceData.volume_24h,
+        market_cap: priceData.market_cap,
+        timestamp: now,
+        lastUpdated: now // Set lastUpdated for caching
+      };
+
+      this.priceCache.set(lowerCaseSymbol, update); // Update cache
+      return update;
+
+    } catch (error) {
+      console.error(`Error fetching price for ${lowerCaseSymbol}:`, error);
+      // Return cached data even if stale, or fallback
+      return cachedData || this.getFallbackPrice(lowerCaseSymbol);
+    }
+  }
+}
+
+export const realTimePriceService = new RealTimePriceService();
