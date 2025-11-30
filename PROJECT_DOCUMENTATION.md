@@ -1,6 +1,9 @@
 ﻿# Bitpanda Pro Project Documentation
 *Last Updated: 2025-11-28*
 
+# current issues
+*Unterminated Function Declaration: The primary issue seems to be a missing closing brace } for the getAuditLogs issing Import: The gte (greater than or equal to) operator is used in a database query within the getWithdrawalLimits function, but it's not imported from drizzle-orm.
+Type Mismatch: There are some type incompatibilities between the data passed to the database and what the schema expects.
 ## Table of Contents
 1. [Project Overview](#project-overview)
 2. [Setup and Installation](#setup-and-installation)
