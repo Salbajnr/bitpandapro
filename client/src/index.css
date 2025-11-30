@@ -88,19 +88,25 @@
   *::after {
     box-sizing: border-box;
     border-color: hsl(var(--border));
+    vertical-align: baseline;
   }
 
   html {
     scroll-behavior: smooth;
     height: 100%;
+    -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+    -webkit-appearance: button;
+    appearance: button;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
     line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
+    font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100%;
     margin: 0;
@@ -186,3 +192,42 @@
 .progress-80 { width: 80%; }
 .progress-90 { width: 90%; }
 .progress-100 { width: 100%; }
+
+/* Line clamp utility */
+.line-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-clamp: 3;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow: hidden;
+  line-clamp: 3;
+  text-overflow: ellipsis;
+}
+
+/* For single line truncation */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  line-clamp: 1;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow: hidden;
+  line-clamp: 1;
+  text-overflow: ellipsis;
+}
+
+/* For two lines truncation */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow: hidden;
+  line-clamp: 2;
+  text-overflow: ellipsis;
+}

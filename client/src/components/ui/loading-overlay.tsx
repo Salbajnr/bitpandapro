@@ -1,5 +1,6 @@
 
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { cn } from "@/lib/utils";
 
 interface LoadingOverlayProps {
   isLoading: boolean;
@@ -39,14 +40,21 @@ export function LoadingOverlay({ isLoading, message, progress }: LoadingOverlayP
               {progress !== undefined && (
                 <div className="w-full bg-muted rounded-full h-2">
                   <div 
-                    className={`h-full bg-primary rounded-full progress-bar progress-${Math.round(progress / 10) * 10}`}
+                    className={cn(
+                      "h-full bg-primary rounded-full transition-all duration-300",
+                      progress !== undefined && `w-[${progress}%]`
+                    )}
                     role="progressbar"
                     aria-valuenow={progress}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label={`Loading progress: ${progress}%`}
-                    title={`Loading progress: ${progress}%`}
-                  />
+                    aria-label={progress !== undefined ? `Loading progress: ${progress}%` : 'Loading'}
+                    title={progress !== undefined ? `Loading progress: ${progress}%` : 'Loading'}
+                  >
+                    <span className="sr-only">
+                      {progress !== undefined ? `${progress}% complete` : 'Loading'}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

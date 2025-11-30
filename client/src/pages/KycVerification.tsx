@@ -15,7 +15,7 @@ import {
   XCircleIcon, AlertTriangleIcon, CameraIcon, FileTextIcon,
   UserIcon, MapPinIcon, PhoneIcon, CalendarIcon
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { api } from "@/lib/api";
 
 interface KycData {
   id?: string;
@@ -61,8 +61,13 @@ export default function KycVerification() {
     documentNumber: ''
   });
 
-  const { data: existingKyc, isLoading } = useQuery<KycData>({
-    queryKey: ["/api/kyc/status"],
+  const { data: kycResponse, isLoading: isLoadingStatus } = useQuery<{ data: KycData | null }>({
+    queryKey: ["kycStatus"],
+    queryFn: async () => {
+      if (!user) return { data: null };
+      const response = await api.get<{ data?: KycData }>('/api/kyc/status');
+      return response.data;
+    },
     retry: false,
     enabled: !!user,
     meta: {
@@ -70,15 +75,14 @@ export default function KycVerification() {
     }
   });
 
+  const existingKyc = kycResponse?.data;
+
   const submitKycMutation = useMutation({
     mutationFn: (data: KycData) =>
-      apiRequest('/api/kyc/submit', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...data,
-          documentFrontImageUrl: 'placeholder-front.jpg',
-          selfieImageUrl: 'placeholder-selfie.jpg'
-        })
+      api.post('/api/kyc/submit', {
+        ...data,
+        documentFrontImageUrl: 'placeholder-front.jpg',
+        selfieImageUrl: 'placeholder-selfie.jpg'
       }),
     onSuccess: () => {
       toast({
@@ -98,10 +102,7 @@ export default function KycVerification() {
 
   const updateKycMutation = useMutation({
     mutationFn: (data: Partial<KycData>) =>
-      apiRequest('/api/kyc/update', {
-        method: 'PATCH',
-        body: JSON.stringify(data)
-      }),
+      api.patch('/api/kyc/update', data),
     onSuccess: () => {
       toast({
         title: "KYC updated successfully",
@@ -118,7 +119,7 @@ export default function KycVerification() {
     },
   });
 
-  if (isLoading) {
+  if (isLoadingStatus) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="max-w-4xl mx-auto space-y-6 animate-pulse">
@@ -130,7 +131,7 @@ export default function KycVerification() {
   }
 
   // If KYC already exists, show status
-  if (existingKyc) {
+  if (existingKyc && Object.keys(existingKyc).length > 0) {
     const getStatusIcon = () => {
       switch (existingKyc.status) {
         case 'approved':
