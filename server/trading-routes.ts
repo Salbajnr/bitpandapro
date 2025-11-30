@@ -298,112 +298,89 @@ router.post('/execute', requireAuth, async (req: Request, res: Response) => {
       if (executedAmount > currentAmount) {
         return res.status(400).json({
           message: `Insufficient holdings. Required: ${executedAmount}, Available: ${currentAmount}`
-        });
-      }
-    }
+  if(transactionData.status === 'completed') {
+          if (tradeData.type === 'buy') {
+            const existing = await storage.getHolding(portfolio.id, tradeData.symbol);
 
-    // Create transaction record
-    const transactionData = {
-      userId: userId,
-      symbol: tradeData.symbol,
-      type: tradeData.type,
-      amount: executedAmount.toString(),
-      price: executionPrice.toString(),
-      total: netTotal.toString(),
-      fees: tradingFee.toString(),
-      orderType: tradeData.orderType,
-      status: executionResult.status === 'pending' ? 'pending' : 'completed',
-      stopLoss: tradeData.stopLoss || null,
-      takeProfit: tradeData.takeProfit || null,
-      slippage: executionResult.slippage?.toString() || '0',
-    };
+            if (existing) {
+              const newAmount = parseFloat(existing.amount) + executedAmount;
+              const newAverage = (
+                parseFloat(existing.averagePurchasePrice) * parseFloat(existing.amount) +
+                executionPrice * executedAmount
+              ) / newAmount;
 
-    const transaction = await storage.createTransaction(transactionData);
+              await storage.upsertHolding({
+                portfolioId: portfolio.id,
+                symbol: tradeData.symbol,
+                name: marketPrice.name,
+                amount: newAmount.toString(),
+                averagePurchasePrice: newAverage.toString(),
+                currentPrice: executionPrice.toString(),
+              });
+            } else {
+              await storage.upsertHolding({
+                portfolioId: portfolio.id,
+                symbol: tradeData.symbol,
+                name: marketPrice.name,
+                amount: executedAmount.toString(),
+                averagePurchasePrice: executionPrice.toString(),
+                currentPrice: executionPrice.toString(),
+              });
+            }
 
-    // Execute portfolio updates for completed orders
-    if (transactionData.status === 'completed') {
-      if (tradeData.type === 'buy') {
-        const existing = await storage.getHolding(portfolio.id, tradeData.symbol);
+            // Update portfolio cash
+            const newCash = parseFloat(portfolio.availableCash) - netTotal;
+            await storage.updatePortfolio(portfolio.id, {
+              availableCash: newCash.toString()
+            });
+          } else {
+            // Handle sell orders
+            const holding = await storage.getHolding(portfolio.id, tradeData.symbol);
+            const newAmount = parseFloat(holding!.amount) - executedAmount;
 
-        if (existing) {
-          const newAmount = parseFloat(existing.amount) + executedAmount;
-          const newAverage = (
-            parseFloat(existing.averagePurchasePrice) * parseFloat(existing.amount) +
-            executionPrice * executedAmount
-          ) / newAmount;
+            if (newAmount <= 0.00000001) { // Account for floating point precision
+              await storage.deleteHolding(portfolio.id, tradeData.symbol);
+            } else {
+              await storage.upsertHolding({
+                portfolioId: portfolio.id,
+                symbol: tradeData.symbol,
+                name: holding!.name,
+                amount: newAmount.toString(),
+                averagePurchasePrice: holding!.averagePurchasePrice,
+                currentPrice: executionPrice.toString(),
+              });
+            }
 
-          await storage.upsertHolding({
-            portfolioId: portfolio.id,
-            symbol: tradeData.symbol,
-            name: marketPrice.name,
-            amount: newAmount.toString(),
-            averagePurchasePrice: newAverage.toString(),
-            currentPrice: executionPrice.toString(),
-          });
-        } else {
-          await storage.upsertHolding({
-            portfolioId: portfolio.id,
-            symbol: tradeData.symbol,
-            name: marketPrice.name,
-            amount: executedAmount.toString(),
-            averagePurchasePrice: executionPrice.toString(),
-            currentPrice: executionPrice.toString(),
-          });
+            // Update portfolio cash
+            const newCash = parseFloat(portfolio.availableCash) + netTotal;
+            await storage.updatePortfolio(portfolio.id, {
+              availableCash: newCash.toString()
+            });
+          }
         }
 
-        // Update portfolio cash
-        const newCash = parseFloat(portfolio.availableCash) - netTotal;
-        await storage.updatePortfolio(portfolio.id, {
-          availableCash: newCash.toString()
+        res.json({
+          ...transaction,
+          executionPrice: executionPrice.toFixed(TRADING_CONFIG.PRICE_PRECISION),
+          tradingFee: tradingFee.toFixed(8),
+          netTotal: netTotal.toFixed(2),
+          slippageApplied: executionResult.slippage?.toFixed(6) || '0',
+          executedAmount: executedAmount.toFixed(TRADING_CONFIG.AMOUNT_PRECISION),
+          orderStatus: executionResult.status || 'completed'
         });
-      } else {
-        // Handle sell orders
-        const holding = await storage.getHolding(portfolio.id, tradeData.symbol);
-        const newAmount = parseFloat(holding!.amount) - executedAmount;
 
-        if (newAmount <= 0.00000001) { // Account for floating point precision
-          await storage.deleteHolding(portfolio.id, tradeData.symbol);
-        } else {
-          await storage.upsertHolding({
-            portfolioId: portfolio.id,
-            symbol: tradeData.symbol,
-            name: holding!.name,
-            amount: newAmount.toString(),
-            averagePurchasePrice: holding!.averagePurchasePrice,
-            currentPrice: executionPrice.toString(),
-          });
+      } catch (error) {
+        console.error("Execute trade error:", error);
+
+        const { formatErrorForResponse } = await import('./lib/errorUtils');
+        const formatted = formatErrorForResponse(error);
+        if (Array.isArray(formatted)) {
+          return res.status(400).json({ message: "Invalid trade data", errors: formatted.map(e => (e as any).message || e) });
         }
 
-        // Update portfolio cash
-        const newCash = parseFloat(portfolio.availableCash) + netTotal;
-        await storage.updatePortfolio(portfolio.id, {
-          availableCash: newCash.toString()
-        });
+        res.status(500).json({ message: "Failed to execute trade", error: formatted });
       }
-    }
-
-    res.json({
-      ...transaction,
-      executionPrice: executionPrice.toFixed(TRADING_CONFIG.PRICE_PRECISION),
-      tradingFee: tradingFee.toFixed(8),
-      netTotal: netTotal.toFixed(2),
-      slippageApplied: executionResult.slippage?.toFixed(6) || '0',
-      executedAmount: executedAmount.toFixed(TRADING_CONFIG.AMOUNT_PRECISION),
-      orderStatus: executionResult.status || 'completed'
     });
-
-  } catch (error) {
-    console.error("Execute trade error:", error);
-
-    const { formatErrorForResponse } = await import('./lib/errorUtils');
-    const formatted = formatErrorForResponse(error);
-    if (Array.isArray(formatted)) {
-      return res.status(400).json({ message: "Invalid trade data", errors: formatted.map(e => (e as any).message || e) });
-    }
-
-    res.status(500).json({ message: "Failed to execute trade", error: formatted });
-  }
-});
 
 // Get order book for a symbol
 router.get('/orderbook/:symbol', requireAuth, async (req: Request, res: Response) => {

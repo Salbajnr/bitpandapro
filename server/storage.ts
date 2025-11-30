@@ -1,7 +1,7 @@
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "@shared/schema";
-import { eq, and, or, asc, desc, sql } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, gte } from "drizzle-orm";
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -370,1142 +370,804 @@ export class DatabaseStorage {
         // Check if already reversed
         if (transaction.status === 'reversed') {
           throw new Error('Transaction is already reversed');
+          await this.db.delete(schema.newsArticles).where(eq(schema.newsArticles.id, id));
         }
 
-        // Update the transaction status
-        const [reversed] = await tx
-          .update(schema.transactions)
-          .set({ 
-            status: 'reversed',
-            updatedAt: new Date().toISOString() 
-          })
-          .where(eq(schema.transactions.id, id))
-          .returning();
-
-        // Create audit log
-        await tx.insert(schema.auditLogs).values({
-          adminId,
-          action: 'reverse_transaction',
-          targetId: id,
-          targetUserId: transaction.userId,
-          details: reason ? JSON.stringify({ reason }) : null,
-          timestamp: new Date()
-        });
-
-        return reversed;
-      });
-    } catch (error) {
-      // Log the error for debugging
-      console.error(`Error reversing transaction ${id}:`, error);
-      
-      // Re-throw with more context if needed
-      if (error instanceof Error) {
-        throw new Error(`Failed to reverse transaction: ${error.message}`);
-      }
-      throw new Error('Failed to reverse transaction due to an unexpected error');
-    }
-  }
-
-  // ---------------- WATCHLIST ----------------
-  async getUserWatchlist(userId: UserId) {
-    return this.db.query.watchlist.findFirst({
-      where: eq(schema.watchlist.userId, userId)
-    });
-  }
-
-  async addToWatchlist(userId: UserId, symbol: string, name?: string) {
-    const existing = await this.getUserWatchlist(userId);
-    const symbols = new Set(existing?.symbols || []);
-    symbols.add(symbol.toUpperCase());
-
-    if (existing?.id) {
-      const result = await this.db.update(schema.watchlist)
-        .set({ symbols: Array.from(symbols), updatedAt: new Date() })
-        .where(eq(schema.watchlist.id, existing.id))
-        .returning();
-      return result[0];
-    }
-
-    const result = await this.db.insert(schema.watchlist)
-      .values({
-        userId,
-        symbols: Array.from(symbols)
-      } as typeof schema.watchlist.$inferInsert)
-      .returning();
-    return result[0];
-  }
-
-  async removeFromWatchlist(userId: UserId, symbol: string) {
-    const existing = await this.getUserWatchlist(userId);
-    if (!existing?.id) return true;
-    const symbols = new Set(existing.symbols || []);
-    symbols.delete(symbol.toUpperCase());
-    await this.db.update(schema.watchlist)
-      .set({ symbols: Array.from(symbols), updatedAt: new Date() })
-      .where(eq(schema.watchlist.id, existing.id));
-    return true;
-  }
-
-  // ---------------- ALERTS ----------------
-  async createAlert(data: Partial<typeof schema.priceAlerts.$inferInsert>) {
-    const result = await this.db.insert(schema.priceAlerts)
-      .values(data as typeof schema.priceAlerts.$inferInsert)
-      .returning();
-    return result[0];
-  }
-
-  async getAlert(id: string) {
-    return this.db.query.priceAlerts.findFirst({
-      where: eq(schema.priceAlerts.id, id)
-    });
-  }
-
-  async getAlertById(id: string) {
-    return this.getAlert(id);
-  }
-
-  async getUserAlerts(userId: UserId) {
-    return this.db.query.priceAlerts.findMany({
-      where: eq(schema.priceAlerts.userId, userId),
-      orderBy: desc(schema.priceAlerts.createdAt)
-    });
-  }
-
-  async getPriceAlert(id: string) {
-    return this.getAlert(id);
-  }
-
-  async getActivePriceAlerts() {
-    return this.db.query.priceAlerts.findMany({
-      where: eq(schema.priceAlerts.isActive, true),
-      orderBy: desc(schema.priceAlerts.createdAt)
-    });
-  }
-
-  async updateAlert(id: string, data: Partial<typeof schema.priceAlerts.$inferInsert>) {
-    const result = await this.db.update(schema.priceAlerts)
-      .set(data)
-      .where(eq(schema.priceAlerts.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async updatePriceAlert(id: string, data: Partial<typeof schema.priceAlerts.$inferInsert>) {
-    return this.updateAlert(id, data);
-  }
-
-  async deleteAlert(id: string) {
-    await this.db.delete(schema.priceAlerts).where(eq(schema.priceAlerts.id, id));
-  }
-
-  async deletePriceAlert(id: string) {
-    await this.db.delete(schema.priceAlerts).where(eq(schema.priceAlerts.id, id));
-  }
-
-  // ---------------- API KEYS ----------------
-  async createApiKey(data: Partial<typeof schema.apiKeys.$inferInsert>) {
-    const result = await this.db.insert(schema.apiKeys).values(data as typeof schema.apiKeys.$inferInsert).returning();
-    return result[0];
-  }
-
-  async getApiKeyById(id: string) {
-    return this.db.query.apiKeys.findFirst({
-      where: eq(schema.apiKeys.id, id)
-    });
-  }
-
-  async getApiKeyByHash(hash: string) {
-    return this.db.query.apiKeys.findFirst({
-      where: eq(schema.apiKeys.keyHash, hash)
-    });
-  }
-
-  async getUserApiKeys(userId: UserId) {
-    return this.db.query.apiKeys.findMany({
-      where: eq(schema.apiKeys.userId, userId),
-      orderBy: desc(schema.apiKeys.createdAt)
-    });
-  }
-
-  async updateApiKey(id: string, data: Partial<typeof schema.apiKeys.$inferInsert>) {
-    const result = await this.db.update(schema.apiKeys)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.apiKeys.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async updateApiKeyLastUsed(id: string) {
-    await this.db.update(schema.apiKeys)
-      .set({ lastUsed: new Date() })
-      .where(eq(schema.apiKeys.id, id));
-  }
-
-  async deleteApiKey(id: string) {
-    await this.db.delete(schema.apiKeys).where(eq(schema.apiKeys.id, id));
-  }
-
-  async revokeApiKey(id: string) {
-    await this.updateApiKey(id, { isActive: false });
-  }
-
-  async getApiUsage(userId?: UserId) {
-    const keys = userId ? await this.getUserApiKeys(userId) : await this.db.query.apiKeys.findMany();
-    const totalRequests = keys.length * 1000; // placeholder metric
-    return {
-      totalKeys: keys.length,
-      activeKeys: keys.filter(k => k.isActive).length,
-      inactiveKeys: keys.filter(k => !k.isActive).length,
-      totalRequests,
-      lastUsed: keys
-        .filter(k => k.lastUsed)
-        .sort((a, b) => new Date(b.lastUsed!).getTime() - new Date(a.lastUsed!).getTime())
-        .slice(0, 5)
-    };
-  }
-
-  async getApiKeyUsageStats() {
-    const keys = await this.db.query.apiKeys.findMany();
-    const dailyUsage = Array.from({ length: 7 }, (_, index) => ({
-      day: index,
-      requests: Math.floor(Math.random() * 5000) + 1000
-    }));
-    return {
-      totalKeys: keys.length,
-      activeKeys: keys.filter(k => k.isActive).length,
-      revokedKeys: keys.filter(k => !k.isActive).length,
-      averageRateLimit: keys.length ? keys.reduce((sum, key) => sum + (key.rateLimit || 0), 0) / keys.length : 0,
-      dailyUsage
-    };
-  }
-
-  // ---------------- NEWS ----------------
-  async getNewsArticles(limit = 100) {
-    return this.db.query.newsArticles.findMany({
-      orderBy: desc(schema.newsArticles.publishedAt),
-      limit
-    });
-  }
-
-  async getNewsArticleById(id: string) {
-    return this.db.query.newsArticles.findFirst({
-      where: eq(schema.newsArticles.id, id)
-    });
-  }
-
-  async createNewsArticle(data: Partial<typeof schema.newsArticles.$inferInsert>) {
-    const result = await this.db.insert(schema.newsArticles).values(data as typeof schema.newsArticles.$inferInsert).returning();
-    return result[0];
-  }
-
-  async updateNewsArticle(id: string, data: Partial<typeof schema.newsArticles.$inferInsert>) {
-    const result = await this.db.update(schema.newsArticles)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.newsArticles.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async deleteNewsArticle(id: string) {
-    await this.db.delete(schema.newsArticles).where(eq(schema.newsArticles.id, id));
-  }
-
   async getNewsAnalytics() {
-    const articles = await this.db.query.newsArticles.findMany();
-    return {
-      totalArticles: articles.length,
-      publishedToday: articles.filter(article => {
-        const published = new Date(article.publishedAt ?? article.createdAt ?? new Date());
-        const now = new Date();
-        return published.toDateString() === now.toDateString();
-      }).length,
-      latestArticles: articles.slice(0, 5)
-    };
-  }
+          const articles = await this.db.query.newsArticles.findMany();
+          return {
+            totalArticles: articles.length,
+            publishedToday: articles.filter(article => {
+              const published = new Date(article.publishedAt ?? article.createdAt ?? new Date());
+              const now = new Date();
+              return published.toDateString() === now.toDateString();
+            }).length,
+            latestArticles: articles.slice(0, 5)
+          };
+        }
 
   // ---------------- KYC ----------------
   async createKycVerification(data: Partial<typeof schema.kycVerifications.$inferInsert>) {
-    const result = await this.db.insert(schema.kycVerifications).values(data as typeof schema.kycVerifications.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.kycVerifications).values(data as typeof schema.kycVerifications.$inferInsert).returning();
+          return result[0];
+        }
 
   async getKycVerification(userId: UserId) {
-    return this.db.query.kycVerifications.findFirst({
-      where: eq(schema.kycVerifications.userId, userId)
-    });
-  }
+          return this.db.query.kycVerifications.findFirst({
+            where: eq(schema.kycVerifications.userId, userId)
+          });
+        }
 
   async getKycVerificationById(id: string) {
-    return this.db.query.kycVerifications.findFirst({
-      where: eq(schema.kycVerifications.id, id)
-    });
-  }
+          return this.db.query.kycVerifications.findFirst({
+            where: eq(schema.kycVerifications.id, id)
+          });
+        }
 
   async getAllKycVerifications(limit = 200) {
-    return this.db.query.kycVerifications.findMany({
-      orderBy: desc(schema.kycVerifications.createdAt),
-      limit
-    });
-  }
+          return this.db.query.kycVerifications.findMany({
+            orderBy: desc(schema.kycVerifications.createdAt),
+            limit
+          });
+        }
 
   async updateKycVerification(id: string, data: Partial<typeof schema.kycVerifications.$inferInsert>) {
-    const result = await this.db.update(schema.kycVerifications)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.kycVerifications.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.kycVerifications)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(schema.kycVerifications.id, id))
+            .returning();
+          return result[0];
+        }
 
   async getKycStatistics() {
-    const verifications = await this.db.query.kycVerifications.findMany();
-    const stats = verifications.reduce<Record<string, number>>((acc, verification) => {
-      acc[verification.status] = (acc[verification.status] || 0) + 1;
-      return acc;
-    }, {});
-    return {
-      total: verifications.length,
-      ...stats
-    };
-  }
+          const verifications = await this.db.query.kycVerifications.findMany();
+          const stats = verifications.reduce<Record<string, number>>((acc, verification) => {
+            acc[verification.status] = (acc[verification.status] || 0) + 1;
+            return acc;
+          }, {});
+          return {
+            total: verifications.length,
+            ...stats
+          };
+        }
 
   // ---------------- INVESTMENTS & SAVINGS ----------------
   async createInvestment(data: Partial<typeof schema.investmentPlans.$inferInsert>) {
-    const result = await this.db.insert(schema.investmentPlans).values(data as typeof schema.investmentPlans.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.investmentPlans).values(data as typeof schema.investmentPlans.$inferInsert).returning();
+          return result[0];
+        }
 
   async getInvestmentById(id: string) {
-    return this.db.query.investmentPlans.findFirst({ where: eq(schema.investmentPlans.id, id) });
-  }
+          return this.db.query.investmentPlans.findFirst({ where: eq(schema.investmentPlans.id, id) });
+        }
 
   async getUserInvestments(userId: UserId) {
-    return this.db.query.investmentPlans.findMany({
-      where: eq(schema.investmentPlans.userId, userId),
-      orderBy: desc(schema.investmentPlans.createdAt)
-    });
-  }
+          return this.db.query.investmentPlans.findMany({
+            where: eq(schema.investmentPlans.userId, userId),
+            orderBy: desc(schema.investmentPlans.createdAt)
+          });
+        }
 
   async getAllUserInvestmentPlans() {
-    return this.db.query.investmentPlans.findMany({
-      orderBy: desc(schema.investmentPlans.createdAt)
-    });
-  }
+          return this.db.query.investmentPlans.findMany({
+            orderBy: desc(schema.investmentPlans.createdAt)
+          });
+        }
 
   async updateInvestment(id: string, data: Partial<typeof schema.investmentPlans.$inferInsert>) {
-    const result = await this.db.update(schema.investmentPlans)
-      .set(data)
-      .where(eq(schema.investmentPlans.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.investmentPlans)
+            .set(data)
+            .where(eq(schema.investmentPlans.id, id))
+            .returning();
+          return result[0];
+        }
 
   async deleteInvestment(id: string) {
-    await this.db.delete(schema.investmentPlans).where(eq(schema.investmentPlans.id, id));
-  }
+          await this.db.delete(schema.investmentPlans).where(eq(schema.investmentPlans.id, id));
+        }
 
   async updateInvestmentPlanReturns(id: string, data: { actualReturn?: string; currentValue?: string }) {
-    await this.updateInvestment(id, {
-      actualReturn: data.actualReturn,
-      currentValue: data.currentValue
-    });
-  }
+          await this.updateInvestment(id, {
+            actualReturn: data.actualReturn,
+            currentValue: data.currentValue
+          });
+        }
 
   async createInvestmentPlanTemplate(data: Partial<typeof schema.investmentPlanTemplates.$inferInsert>) {
-    const result = await this.db.insert(schema.investmentPlanTemplates).values(data as typeof schema.investmentPlanTemplates.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.investmentPlanTemplates).values(data as typeof schema.investmentPlanTemplates.$inferInsert).returning();
+          return result[0];
+        }
 
   async getInvestmentPlanTemplates() {
-    return this.db.query.investmentPlanTemplates.findMany({
-      orderBy: desc(schema.investmentPlanTemplates.createdAt)
-    });
-  }
+          return this.db.query.investmentPlanTemplates.findMany({
+            orderBy: desc(schema.investmentPlanTemplates.createdAt)
+          });
+        }
 
   async updateInvestmentPlanTemplate(id: string, data: Partial<typeof schema.investmentPlanTemplates.$inferInsert>) {
-    const result = await this.db.update(schema.investmentPlanTemplates)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.investmentPlanTemplates.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.investmentPlanTemplates)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(schema.investmentPlanTemplates.id, id))
+            .returning();
+          return result[0];
+        }
 
   async deleteInvestmentPlanTemplate(id: string) {
-    await this.db.delete(schema.investmentPlanTemplates).where(eq(schema.investmentPlanTemplates.id, id));
-  }
+          await this.db.delete(schema.investmentPlanTemplates).where(eq(schema.investmentPlanTemplates.id, id));
+        }
 
   async createSavingsPlan(data: Partial<typeof schema.savingsPlans.$inferInsert>) {
-    const result = await this.db.insert(schema.savingsPlans).values(data as typeof schema.savingsPlans.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.savingsPlans).values(data as typeof schema.savingsPlans.$inferInsert).returning();
+          return result[0];
+        }
 
   async getSavingsPlanById(id: string) {
-    return this.db.query.savingsPlans.findFirst({
-      where: eq(schema.savingsPlans.id, id)
-    });
-  }
+          return this.db.query.savingsPlans.findFirst({
+            where: eq(schema.savingsPlans.id, id)
+          });
+        }
 
   async getUserSavingsPlans(userId: UserId) {
-    return this.db.query.savingsPlans.findMany({
-      where: eq(schema.savingsPlans.userId, userId),
-      orderBy: desc(schema.savingsPlans.createdAt)
-    });
-  }
+          return this.db.query.savingsPlans.findMany({
+            where: eq(schema.savingsPlans.userId, userId),
+            orderBy: desc(schema.savingsPlans.createdAt)
+          });
+        }
 
   async getAllUserSavingsPlans() {
-    return this.db.query.savingsPlans.findMany({
-      orderBy: desc(schema.savingsPlans.createdAt)
-    });
-  }
+          return this.db.query.savingsPlans.findMany({
+            orderBy: desc(schema.savingsPlans.createdAt)
+          });
+        }
 
   async updateSavingsPlan(id: string, data: Partial<typeof schema.savingsPlans.$inferInsert>) {
-    const result = await this.db.update(schema.savingsPlans)
-      .set(data)
-      .where(eq(schema.savingsPlans.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.savingsPlans)
+            .set(data)
+            .where(eq(schema.savingsPlans.id, id))
+            .returning();
+          return result[0];
+        }
 
   async deleteSavingsPlan(id: string) {
-    await this.db.delete(schema.savingsPlans).where(eq(schema.savingsPlans.id, id));
-  }
+          await this.db.delete(schema.savingsPlans).where(eq(schema.savingsPlans.id, id));
+        }
 
   async updateSavingsPlanInterest(id: string, data: { interestEarned?: string; totalSaved?: string }) {
-    await this.updateSavingsPlan(id, {
-      interestEarned: data.interestEarned,
-      totalSaved: data.totalSaved
-    });
-  }
+          await this.updateSavingsPlan(id, {
+            interestEarned: data.interestEarned,
+            totalSaved: data.totalSaved
+          });
+        }
 
   async createSavingsPlanTemplate(data: Partial<typeof schema.savingsPlanTemplates.$inferInsert>) {
-    const result = await this.db.insert(schema.savingsPlanTemplates).values(data as typeof schema.savingsPlanTemplates.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.savingsPlanTemplates).values(data as typeof schema.savingsPlanTemplates.$inferInsert).returning();
+          return result[0];
+        }
 
   async getSavingsPlanTemplates() {
-    return this.db.query.savingsPlanTemplates.findMany({
-      orderBy: desc(schema.savingsPlanTemplates.createdAt)
-    });
-  }
+          return this.db.query.savingsPlanTemplates.findMany({
+            orderBy: desc(schema.savingsPlanTemplates.createdAt)
+          });
+        }
 
   async updateSavingsPlanTemplate(id: string, data: Partial<typeof schema.savingsPlanTemplates.$inferInsert>) {
-    const result = await this.db.update(schema.savingsPlanTemplates)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.savingsPlanTemplates.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.savingsPlanTemplates)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(schema.savingsPlanTemplates.id, id))
+            .returning();
+          return result[0];
+        }
 
   async deleteSavingsPlanTemplate(id: string) {
-    await this.db.delete(schema.savingsPlanTemplates).where(eq(schema.savingsPlanTemplates.id, id));
-  }
+          await this.db.delete(schema.savingsPlanTemplates).where(eq(schema.savingsPlanTemplates.id, id));
+        }
 
   async createStakingPosition(data: Partial<typeof schema.stakingPositions.$inferInsert>) {
-    const result = await this.db.insert(schema.stakingPositions).values(data as typeof schema.stakingPositions.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.stakingPositions).values(data as typeof schema.stakingPositions.$inferInsert).returning();
+          return result[0];
+        }
 
   async getStakingPosition(id: string) {
-    return this.db.query.stakingPositions.findFirst({ where: eq(schema.stakingPositions.id, id) });
-  }
+          return this.db.query.stakingPositions.findFirst({ where: eq(schema.stakingPositions.id, id) });
+        }
 
   async getUserStakingPositions(userId: UserId) {
-    return this.db.query.stakingPositions.findMany({
-      where: eq(schema.stakingPositions.userId, userId),
-      orderBy: desc(schema.stakingPositions.createdAt)
-    });
-  }
+          return this.db.query.stakingPositions.findMany({
+            where: eq(schema.stakingPositions.userId, userId),
+            orderBy: desc(schema.stakingPositions.createdAt)
+          });
+        }
 
   async updateStakingPosition(id: string, data: Partial<typeof schema.stakingPositions.$inferInsert>) {
-    const result = await this.db.update(schema.stakingPositions)
-      .set(data)
-      .where(eq(schema.stakingPositions.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.stakingPositions)
+            .set(data)
+            .where(eq(schema.stakingPositions.id, id))
+            .returning();
+          return result[0];
+        }
 
   async getStakingRewards(userId: UserId) {
-    const positions = await this.getUserStakingPositions(userId);
-    const totalRewards = positions.reduce((sum, pos) => sum + parseFloat(pos.totalRewards || '0'), 0);
-    return {
-      totalRewards,
-      positions
-    };
-  }
+          const positions = await this.getUserStakingPositions(userId);
+          const totalRewards = positions.reduce((sum, pos) => sum + parseFloat(pos.totalRewards || '0'), 0);
+          return {
+            totalRewards,
+            positions
+          };
+        }
 
   async getStakingAnalytics() {
-    const positions = await this.db.query.stakingPositions.findMany();
-    const totalValue = positions.reduce((sum, pos) => sum + parseFloat(pos.amount), 0);
-    return {
-      totalPositions: positions.length,
-      totalValue,
-      averageApy: positions.length
-        ? positions.reduce((sum, pos) => sum + parseFloat(pos.apy), 0) / positions.length
-        : 0
-    };
-  }
+          const positions = await this.db.query.stakingPositions.findMany();
+          const totalValue = positions.reduce((sum, pos) => sum + parseFloat(pos.amount), 0);
+          return {
+            totalPositions: positions.length,
+            totalValue,
+            averageApy: positions.length
+              ? positions.reduce((sum, pos) => sum + parseFloat(pos.apy), 0) / positions.length
+              : 0
+          };
+        }
 
   async createLendingPosition(data: Partial<typeof schema.lendingPositions.$inferInsert>) {
-    const result = await this.db.insert(schema.lendingPositions).values(data as typeof schema.lendingPositions.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.lendingPositions).values(data as typeof schema.lendingPositions.$inferInsert).returning();
+          return result[0];
+        }
 
   async getLendingPosition(id: string) {
-    return this.db.query.lendingPositions.findFirst({ where: eq(schema.lendingPositions.id, id) });
-  }
+          return this.db.query.lendingPositions.findFirst({ where: eq(schema.lendingPositions.id, id) });
+        }
 
   async getUserLendingPositions(userId: UserId) {
-    return this.db.query.lendingPositions.findMany({
-      where: eq(schema.lendingPositions.userId, userId),
-      orderBy: desc(schema.lendingPositions.createdAt)
-    });
-  }
+          return this.db.query.lendingPositions.findMany({
+            where: eq(schema.lendingPositions.userId, userId),
+            orderBy: desc(schema.lendingPositions.createdAt)
+          });
+        }
 
   async updateLendingPosition(id: string, data: Partial<typeof schema.lendingPositions.$inferInsert>) {
-    const result = await this.db.update(schema.lendingPositions)
-      .set(data)
-      .where(eq(schema.lendingPositions.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.lendingPositions)
+            .set(data)
+            .where(eq(schema.lendingPositions.id, id))
+            .returning();
+          return result[0];
+        }
 
   async createLoan(data: Partial<typeof schema.loans.$inferInsert>) {
-    const result = await this.db.insert(schema.loans).values(data as typeof schema.loans.$inferInsert).returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.loans).values(data as typeof schema.loans.$inferInsert).returning();
+          return result[0];
+        }
 
   async getLoan(id: string) {
-    return this.db.query.loans.findFirst({
-      where: eq(schema.loans.id, id)
-    });
-  }
+          return this.db.query.loans.findFirst({
+            where: eq(schema.loans.id, id)
+          });
+        }
 
   async getUserLoans(userId: UserId) {
-    return this.db.query.loans.findMany({
-      where: eq(schema.loans.userId, userId),
-      orderBy: desc(schema.loans.createdAt)
-    });
-  }
+          return this.db.query.loans.findMany({
+            where: eq(schema.loans.userId, userId),
+            orderBy: desc(schema.loans.createdAt)
+          });
+        }
 
   async updateLoan(id: string, data: Partial<typeof schema.loans.$inferInsert>) {
-    const result = await this.db.update(schema.loans)
-      .set(data)
-      .where(eq(schema.loans.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.loans)
+            .set(data)
+            .where(eq(schema.loans.id, id))
+            .returning();
+          return result[0];
+        }
 
   // ---------------- SOCIAL ----------------
   async createFriendRequest(data: Partial<typeof schema.friendRequests.$inferInsert>) {
-    const existing = await this.getFriendRequest(data.fromUserId!, data.toUserId!);
-    if (existing) return existing;
-    const result = await this.db.insert(schema.friendRequests).values(data as typeof schema.friendRequests.$inferInsert).returning();
-    return result[0];
-  }
+          const existing = await this.getFriendRequest(data.fromUserId!, data.toUserId!);
+          if (existing) return existing;
+          const result = await this.db.insert(schema.friendRequests).values(data as typeof schema.friendRequests.$inferInsert).returning();
+          return result[0];
+        }
 
   async getFriendRequest(fromUserId: UserId, toUserId: UserId) {
-    return this.db.query.friendRequests.findFirst({
-      where: and(
-        eq(schema.friendRequests.fromUserId, fromUserId),
-        eq(schema.friendRequests.toUserId, toUserId)
-      )
-    });
-  }
+          return this.db.query.friendRequests.findFirst({
+            where: and(
+              eq(schema.friendRequests.fromUserId, fromUserId),
+              eq(schema.friendRequests.toUserId, toUserId)
+            )
+          });
+        }
 
   async getFriendRequestById(id: string) {
-    return this.db.query.friendRequests.findFirst({
-      where: eq(schema.friendRequests.id, id)
-    });
-  }
+          return this.db.query.friendRequests.findFirst({
+            where: eq(schema.friendRequests.id, id)
+          });
+        }
 
   async getIncomingFriendRequests(userId: UserId) {
-    return this.db.query.friendRequests.findMany({
-      where: eq(schema.friendRequests.toUserId, userId),
-      orderBy: desc(schema.friendRequests.createdAt)
-    });
-  }
+          return this.db.query.friendRequests.findMany({
+            where: eq(schema.friendRequests.toUserId, userId),
+            orderBy: desc(schema.friendRequests.createdAt)
+          });
+        }
 
   async updateFriendRequest(id: string, data: Partial<typeof schema.friendRequests.$inferInsert>) {
-    const result = await this.db.update(schema.friendRequests)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.friendRequests.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.friendRequests)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(schema.friendRequests.id, id))
+            .returning();
+          return result[0];
+        }
 
   async createFriendship(userId: UserId, friendId: UserId) {
-    const entries = [
-      { userId, friendId },
-      { userId: friendId, friendId: userId }
-    ];
-    await this.db.insert(schema.friendships)
-      .values(entries)
-      .onConflictDoNothing();
-  }
+          const entries = [
+            { userId, friendId },
+            { userId: friendId, friendId: userId }
+          ];
+          await this.db.insert(schema.friendships)
+            .values(entries)
+            .onConflictDoNothing();
+        }
 
   async removeFriendship(userId: UserId, friendId: UserId) {
-    await this.db.delete(schema.friendships)
-      .where(or(
-        and(eq(schema.friendships.userId, userId), eq(schema.friendships.friendId, friendId)),
-        and(eq(schema.friendships.userId, friendId), eq(schema.friendships.friendId, userId))
-      ));
-  }
+          await this.db.delete(schema.friendships)
+            .where(or(
+              and(eq(schema.friendships.userId, userId), eq(schema.friendships.friendId, friendId)),
+              and(eq(schema.friendships.userId, friendId), eq(schema.friendships.friendId, userId))
+            ));
+        }
 
   async getUserFriends(userId: UserId) {
-    return this.db.query.friendships.findMany({
-      where: eq(schema.friendships.userId, userId)
-    });
-  }
+          return this.db.query.friendships.findMany({
+            where: eq(schema.friendships.userId, userId)
+          });
+        }
 
   async followUser(followerId: UserId, followingId: UserId) {
-    await this.db.insert(schema.userFollowers)
-      .values({ followerId, followingId })
-      .onConflictDoNothing();
-  }
+          await this.db.insert(schema.userFollowers)
+            .values({ followerId, followingId })
+            .onConflictDoNothing();
+        }
 
   async unfollowUser(followerId: UserId, followingId: UserId) {
-    await this.db.delete(schema.userFollowers)
-      .where(and(
-        eq(schema.userFollowers.followerId, followerId),
-        eq(schema.userFollowers.followingId, followingId)
-      ));
-  }
+          await this.db.delete(schema.userFollowers)
+            .where(and(
+              eq(schema.userFollowers.followerId, followerId),
+              eq(schema.userFollowers.followingId, followingId)
+            ));
+        }
 
   async isFollowing(followerId: UserId, followingId: UserId) {
-    const follow = await this.db.query.userFollowers.findFirst({
-      where: and(
-        eq(schema.userFollowers.followerId, followerId),
-        eq(schema.userFollowers.followingId, followingId)
-      )
-    });
-    return Boolean(follow);
-  }
+          const follow = await this.db.query.userFollowers.findFirst({
+            where: and(
+              eq(schema.userFollowers.followerId, followerId),
+              eq(schema.userFollowers.followingId, followingId)
+            )
+          });
+          return Boolean(follow);
+        }
 
   async getUserFollowers(userId: UserId) {
-    return this.db.query.userFollowers.findMany({
-      where: eq(schema.userFollowers.followingId, userId),
-      orderBy: desc(schema.userFollowers.createdAt)
-    });
-  }
+          return this.db.query.userFollowers.findMany({
+            where: eq(schema.userFollowers.followingId, userId),
+            orderBy: desc(schema.userFollowers.createdAt)
+          });
+        }
 
   async getUserFollowing(userId: UserId) {
-    return this.db.query.userFollowers.findMany({
-      where: eq(schema.userFollowers.followerId, userId),
-      orderBy: desc(schema.userFollowers.createdAt)
-    });
-  }
+          return this.db.query.userFollowers.findMany({
+            where: eq(schema.userFollowers.followerId, userId),
+            orderBy: desc(schema.userFollowers.createdAt)
+          });
+        }
 
   // ---------------- DEPOSITS ----------------
   async getDepositById(id: DepositId) {
-    return this.db.query.deposits.findFirst({ where: eq(schema.deposits.id, id) });
-  }
+          return this.db.query.deposits.findFirst({ where: eq(schema.deposits.id, id) });
+        }
 
   async getAllDeposits(limit = 1000) {
-    return this.db.query.deposits.findMany({
-      orderBy: desc(schema.deposits.createdAt),
-      limit
-    });
-  }
+          return this.db.query.deposits.findMany({
+            orderBy: desc(schema.deposits.createdAt),
+            limit
+          });
+        }
 
   async getUserDeposits(userId: UserId, limit = 100) {
-    return this.db.query.deposits.findMany({
-      where: eq(schema.deposits.userId, userId),
-      orderBy: desc(schema.deposits.createdAt),
-      limit
-    });
-  }
+          return this.db.query.deposits.findMany({
+            where: eq(schema.deposits.userId, userId),
+            orderBy: desc(schema.deposits.createdAt),
+            limit
+          });
+        }
 
   async createDeposit(data: Partial<typeof schema.deposits.$inferSelect>) {
-    return this.db.insert(schema.deposits).values(data as typeof schema.deposits.$inferInsert).returning();
-  }
+          return this.db.insert(schema.deposits).values(data as typeof schema.deposits.$inferInsert).returning();
+        }
 
   async updateDeposit(id: DepositId, data: Partial<typeof schema.deposits.$inferInsert>) {
-    const result = await this.db.update(schema.deposits)
-      .set(data)
-      .where(eq(schema.deposits.id, id))
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.update(schema.deposits)
+            .set(data)
+            .where(eq(schema.deposits.id, id))
+            .returning();
+          return result[0];
+        }
 
-  async updateDepositStatus(id: DepositId, status: string, adminNotes?: string) {
-    return this.db
-      .update(schema.deposits)
-      .set({ status, adminNotes })
-      .where(eq(schema.deposits.id, id));
-  }
+  async updateDepositStatus(id: DepositId, status: string, adminNotes ?: string) {
+          return this.db
+            .update(schema.deposits)
+            .set({ status, adminNotes })
+            .where(eq(schema.deposits.id, id));
+        }
 
   async getSharedWalletAddresses() {
-    return this.db.query.sharedWalletAddresses.findMany({
-      where: eq(schema.sharedWalletAddresses.isActive, true)
-    });
-  }
+          return this.db.query.sharedWalletAddresses.findMany({
+            where: eq(schema.sharedWalletAddresses.isActive, true)
+          });
+        }
 
   async createOrUpdateSharedWalletAddress(data: Partial<typeof schema.sharedWalletAddresses.$inferInsert>) {
-    const existing = await this.db.query.sharedWalletAddresses.findFirst({
-      where: eq(schema.sharedWalletAddresses.symbol, data.symbol!)
-    });
+          const existing = await this.db.query.sharedWalletAddresses.findFirst({
+            where: eq(schema.sharedWalletAddresses.symbol, data.symbol!)
+          });
 
-    if (existing) {
-      const result = await this.db.update(schema.sharedWalletAddresses)
-        .set({ ...data, updatedAt: new Date() })
-        .where(eq(schema.sharedWalletAddresses.id, existing.id))
-        .returning();
-      return result[0];
-    }
+          if (existing) {
+            const result = await this.db.update(schema.sharedWalletAddresses)
+              .set({ ...data, updatedAt: new Date() })
+              .where(eq(schema.sharedWalletAddresses.id, existing.id))
+              .returning();
+            return result[0];
+          }
 
-    const result = await this.db.insert(schema.sharedWalletAddresses)
-      .values(data as typeof schema.sharedWalletAddresses.$inferInsert)
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.sharedWalletAddresses)
+            .values(data as typeof schema.sharedWalletAddresses.$inferInsert)
+            .returning();
+          return result[0];
+        }
 
   // ---------------- WITHDRAWALS ----------------
   async getUserWithdrawals(userId: UserId) {
-    return this.db.query.transactions.findMany({ where: and(eq(schema.transactions.userId, userId), eq(schema.transactions.type, 'withdrawal')) });
-  }
+          return this.db.query.transactions.findMany({ where: and(eq(schema.transactions.userId, userId), eq(schema.transactions.type, 'withdrawal')) });
+        }
 
   async getAllWithdrawals() {
-    return this.db.query.transactions.findMany({ where: eq(schema.transactions.type, 'withdrawal') });
-  }
+          return this.db.query.transactions.findMany({ where: eq(schema.transactions.type, 'withdrawal') });
+        }
 
   async getWithdrawalById(id: WithdrawalId) {
-    return this.db.query.transactions.findFirst({ where: eq(schema.transactions.id, id) });
-  }
+          return this.db.query.transactions.findFirst({ where: eq(schema.transactions.id, id) });
+        }
 
   async createWithdrawal(data: Partial<typeof schema.transactions.$inferSelect>) {
-    return this.db.insert(schema.transactions).values(data).returning();
-  }
+          return this.db.insert(schema.transactions).values(data).returning();
+        }
 
-  async updateWithdrawalStatus(id: WithdrawalId, status: string, adminNotes?: string) {
-    const updateData: any = { status };
-    if (adminNotes) {
-      updateData.adminNotes = adminNotes;
-    }
-    const result = await this.db.update(schema.transactions).set(updateData).where(eq(schema.transactions.id, id)).returning();
-    return result[0];
-  }
+  async updateWithdrawalStatus(id: WithdrawalId, status: string, adminNotes ?: string) {
+          const updateData: any = { status };
+          if (adminNotes) {
+            updateData.adminNotes = adminNotes;
+          }
+          const result = await this.db.update(schema.transactions).set(updateData).where(eq(schema.transactions.id, id)).returning();
+          return result[0];
+        }
 
   async confirmWithdrawal(userId: UserId, token: string) {
-    // Find withdrawal with matching token and user
-    const withdrawal = await this.db.query.transactions.findFirst({
-      where: and(
-        eq(schema.transactions.userId, userId),
-        eq(schema.transactions.type, 'withdrawal')
-      ),
-    });
-    return withdrawal;
-  }
+          // Find withdrawal with matching token and user
+          const withdrawal = await this.db.query.transactions.findFirst({
+            where: and(
+              eq(schema.transactions.userId, userId),
+              eq(schema.transactions.type, 'withdrawal')
+            ),
+          });
+          return withdrawal;
+        }
 
   async updatePortfolioBalance(userId: UserId, amountChange: number) {
-    const portfolio = await this.db.query.portfolios.findFirst({ where: eq(schema.portfolios.userId, userId) });
-    if (portfolio) {
-      const newCash = parseFloat(portfolio.availableCash) + amountChange;
-      await this.updatePortfolio(portfolio.id, { availableCash: newCash.toString() });
-    }
-  }
+          const portfolio = await this.db.query.portfolios.findFirst({ where: eq(schema.portfolios.userId, userId) });
+          if (portfolio) {
+            const newCash = parseFloat(portfolio.availableCash) + amountChange;
+            await this.updatePortfolio(portfolio.id, { availableCash: newCash.toString() });
+          }
+        }
 
-  async calculateWithdrawalFees(amount: number, method?: string) {
-    // Example: 0.5% fee, can vary by method
-    const feeRate = method === 'crypto_wallet' ? 0.002 : 0.005;
-    return amount * feeRate;
-  }
+  async calculateWithdrawalFees(amount: number, method ?: string) {
+          // Example: 0.5% fee, can vary by method
+          const feeRate = method === 'crypto_wallet' ? 0.002 : 0.005;
+          return amount * feeRate;
+        }
 
-  async getWithdrawalLimits(userId?: UserId) {
-    // Get default limits from platform settings
-    const dailyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'daily_withdrawal_limit') });
-    const monthlyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'monthly_withdrawal_limit') });
-    
-    const dailyLimit = dailyLimitSetting?.value || '1000';
-    const monthlyLimit = monthlyLimitSetting?.value || '10000';
-    
-    if (!userId) {
-      return {
-        dailyLimit,
-        monthlyLimit,
-        dailyUsed: '0',
-        monthlyUsed: '0'
-      };
-    }
-    
-    // Calculate used amounts for the user
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    
-    const dailyWithdrawals = await this.db
-      .select({ amount: schema.transactions.amount })
-      .from(schema.transactions)
-      .where(and(
-        eq(schema.transactions.userId, userId),
-        eq(schema.transactions.type, 'withdrawal'),
-        gte(schema.transactions.createdAt, new Date(today.setHours(0, 0, 0, 0)))
-      ));
-    
-    const monthlyWithdrawals = await this.db
-      .select({ amount: schema.transactions.amount })
-      .from(schema.transactions)
-      .where(and(
-        eq(schema.transactions.userId, userId),
-        eq(schema.transactions.type, 'withdrawal'),
-        gte(schema.transactions.createdAt, startOfMonth)
-      ));
-    
-    const dailyUsed = dailyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
-    const monthlyUsed = monthlyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
-    
-    return {
-      dailyLimit,
-      monthlyLimit,
-      dailyUsed,
-      monthlyUsed
-    };
-  }
+  async getWithdrawalLimits(userId ?: UserId) {
+          // Get default limits from platform settings
+          const dailyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'daily_withdrawal_limit') });
+          const monthlyLimitSetting = await this.db.query.platformSettings.findFirst({ where: eq(schema.platformSettings.key, 'monthly_withdrawal_limit') });
+
+          const dailyLimit = dailyLimitSetting?.value || '1000';
+          const monthlyLimit = monthlyLimitSetting?.value || '10000';
+
+          if (!userId) {
+            return {
+              dailyLimit,
+              monthlyLimit,
+              dailyUsed: '0',
+              monthlyUsed: '0'
+            };
+          }
+
+          // Calculate used amounts for the user
+          const today = new Date();
+          const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+          const dailyWithdrawals = await this.db
+            .select({ amount: schema.transactions.amount })
+            .from(schema.transactions)
+            .where(and(
+              eq(schema.transactions.userId, userId),
+              eq(schema.transactions.type, 'withdrawal'),
+              gte(schema.transactions.createdAt, new Date(today.setHours(0, 0, 0, 0)))
+            ));
+
+          const monthlyWithdrawals = await this.db
+            .select({ amount: schema.transactions.amount })
+            .from(schema.transactions)
+            .where(and(
+              eq(schema.transactions.userId, userId),
+              eq(schema.transactions.type, 'withdrawal'),
+              gte(schema.transactions.createdAt, startOfMonth)
+            ));
+
+          const dailyUsed = dailyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
+          const monthlyUsed = monthlyWithdrawals.reduce((sum, withdrawal) => sum + parseFloat(withdrawal.amount), 0).toString();
+
+          return {
+            dailyLimit,
+            monthlyLimit,
+            dailyUsed,
+            monthlyUsed
+          };
+        }
 
   async setWithdrawalLimits(limit: number) {
-    return this.db
-      .update(schema.platformSettings)
-      .set({ value: limit.toString() })
-      .where(eq(schema.platformSettings.key, 'withdrawal_limit'));
-  }
+          return this.db
+            .update(schema.platformSettings)
+            .set({ value: limit.toString() })
+            .where(eq(schema.platformSettings.key, 'withdrawal_limit'));
+        }
 
   async getWithdrawalStats() {
-    // Aggregate withdrawals
-    const total = await this.db.select({ total: schema.transactions.amount }).from(schema.transactions).where(eq(schema.transactions.type, 'withdrawal'));
-    return total;
-  }
+          // Aggregate withdrawals
+          const total = await this.db.select({ total: schema.transactions.amount }).from(schema.transactions).where(eq(schema.transactions.type, 'withdrawal'));
+          return total;
+        }
 
   // ---------------- METALS ----------------
   async getMetalPrice(symbol: string) {
-    return this.db.query.metalsPricing.findFirst({ where: eq(schema.metalsPricing.symbol, symbol) });
-  }
+          return this.db.query.metalsPricing.findFirst({ where: eq(schema.metalsPricing.symbol, symbol) });
+        }
 
   async updateMetalPrice(symbol: string, price: number) {
-    return this.db.update(schema.metalsPricing).set({ pricePerOunce: price }).where(eq(schema.metalsPricing.symbol, symbol));
-  }
+          return this.db.update(schema.metalsPricing).set({ pricePerOunce: price }).where(eq(schema.metalsPricing.symbol, symbol));
+        }
 
   // ---------------- BALANCE ADJUSTMENTS ----------------
   async adjustUserBalance(adminId: UserId, targetUserId: UserId, type: 'add' | 'remove' | 'set', amount: number) {
-    return this.db.insert(schema.balanceAdjustments).values({
-      adminId,
-      targetUserId,
-      adjustmentType: type,
-      amount,
-    }).returning();
-  }
+          return this.db.insert(schema.balanceAdjustments).values({
+            adminId,
+            targetUserId,
+            adjustmentType: type,
+            amount,
+          }).returning();
+        }
 
   async createBalanceAdjustment(data: Partial<typeof schema.balanceAdjustments.$inferInsert>) {
-    const result = await this.db.insert(schema.balanceAdjustments)
-      .values(data as typeof schema.balanceAdjustments.$inferInsert)
-      .returning();
-    return result[0];
-  }
+          const result = await this.db.insert(schema.balanceAdjustments)
+            .values(data as typeof schema.balanceAdjustments.$inferInsert)
+            .returning();
+          return result[0];
+        }
 
-  async getBalanceAdjustments(targetUserId?: UserId, page = 1, limit = 50) {
-    const offset = (Math.max(page, 1) - 1) * limit;
-    const whereClause = targetUserId ? eq(schema.balanceAdjustments.targetUserId, targetUserId) : undefined;
-    return this.db.query.balanceAdjustments.findMany({
-      where: whereClause,
-      orderBy: desc(schema.balanceAdjustments.createdAt),
-      limit,
-      offset
-    });
-  }
+  async getBalanceAdjustments(targetUserId ?: UserId, page = 1, limit = 50) {
+          const offset = (Math.max(page, 1) - 1) * limit;
+          const whereClause = targetUserId ? eq(schema.balanceAdjustments.targetUserId, targetUserId) : undefined;
+          return this.db.query.balanceAdjustments.findMany({
+            where: whereClause,
+            orderBy: desc(schema.balanceAdjustments.createdAt),
+            limit,
+            offset
+          });
+        }
 
   async logAdminAction(data: Partial<typeof schema.adminActionLogs.$inferInsert>) {
-    const { timestamp, ...insertData } = data;
-    const result = await this.db.insert(schema.adminActionLogs)
-      .values(insertData)
-      .returning();
-    return result[0];
-  }
+          const { timestamp, ...insertData } = data;
+          const result = await this.db.insert(schema.adminActionLogs)
+            .values(insertData)
+            .returning();
+          return result[0];
+        }
 
   // ---------------- SYSTEM / SECURITY ----------------
   async isDbConnected() {
-    try {
-      await pool.query('SELECT 1');
-      return true;
-    } catch (error) {
-      console.error('Database connectivity check failed:', error);
-      return false;
-    }
-  }
+          try {
+            await pool.query('SELECT 1');
+            return true;
+          } catch (error) {
+            console.error('Database connectivity check failed:', error);
+            return false;
+          }
+        }
 
   async getActiveSessions() {
-    const sessions = await this.db.query.sessions.findMany({
-      orderBy: desc(schema.sessions.expire)
-    });
+          const sessions = await this.db.query.sessions.findMany({
+            orderBy: desc(schema.sessions.expire)
+          });
 
-    return sessions.map((session) => ({
-      id: session.sid,
-      userId: (session.sess as any)?.user?.id,
-      data: session.sess,
-      expire: session.expire
-    }));
-  }
+          return sessions.map((session) => ({
+            id: session.sid,
+            userId: (session.sess as any)?.user?.id,
+            data: session.sess,
+            expire: session.expire
+          }));
+        }
 
   async invalidateUserSessions(userId: UserId) {
-    await pool.query(
-      "DELETE FROM sessions WHERE sess -> 'user' ->> 'id' = $1",
-      [userId]
-    );
-  }
+          await pool.query(
+            "DELETE FROM sessions WHERE sess -> 'user' ->> 'id' = $1",
+            [userId]
+          );
+        }
 
   async invalidateAllSessions() {
-    await pool.query('DELETE FROM sessions');
-  }
+          await pool.query('DELETE FROM sessions');
+        }
 
   async getSystemConfig() {
-    const entries = await this.db.query.platformSettings.findMany();
-    return entries.reduce<Record<string, string>>((acc, entry) => {
-      acc[entry.key] = entry.value;
-      return acc;
-    }, {});
-  }
+          const entries = await this.db.query.platformSettings.findMany();
+          return entries.reduce<Record<string, string>>((acc, entry) => {
+            acc[entry.key] = entry.value;
+            return acc;
+          }, {});
+        }
 
   async updateSystemConfig(data: Record<string, string>) {
-    for (const [key, value] of Object.entries(data)) {
-      await this.db.insert(schema.platformSettings)
-        .values({
-          key,
-          value,
-          updatedAt: new Date()
-        })
-        .onConflictDoUpdate({
-          target: schema.platformSettings.key,
-          set: {
-            value,
-            updatedAt: new Date()
-          }
-        });
-    }
-    return this.getSystemConfig();
-  }
-
-  async getRateLimitEntry(key: string): Promise<RateLimitStoreEntry | null> {
-    const entry = await this.db.query.rateLimitEntries.findFirst({
-      where: eq(schema.rateLimitEntries.key, key)
-    });
-    return entry?.data as RateLimitStoreEntry | null;
-  }
-
-  async setRateLimitEntry(key: string, data: RateLimitStoreEntry) {
-    await this.db.insert(schema.rateLimitEntries)
-      .values({
-        key,
-        data,
-        updatedAt: new Date()
-      })
-      .onConflictDoUpdate({
-        target: schema.rateLimitEntries.key,
-        set: {
-          data,
-          updatedAt: new Date()
-        }
-      });
-  }
-
-  async incrementFailedLoginAttempts(key: string) {
-    const existing = await this.getRateLimitEntry(key);
-    const count = (existing?.count ?? 0) + 1;
-    const entry: RateLimitStoreEntry = {
-      count,
-      firstRequest: existing?.firstRequest ?? Date.now(),
-      resetTime: Date.now() + 15 * 60 * 1000
-    };
-    await this.setRateLimitEntry(key, entry);
-    return count;
-  }
-
-  async createAuditLog(data: Partial<typeof schema.auditLogs.$inferInsert>) {
-    const result = await this.db.insert(schema.auditLogs)
-      .values(data)
-      .returning();
-    return result[0];
-  }
-
-  async getAuditLogs(limit = 200) {
-    return this.db.query.auditLogs.findMany({
-
-  async createSecurityLog(data: Partial<typeof schema.securityEvents.$inferInsert>) {
-    const result = await this.db.insert(schema.securityEvents)
-      .values(data)
-      .returning();
-    return result[0];
-  }
-
-  async logSecurityEvent(event: { type: string; userId?: string; ip?: string; userAgent?: string; endpoint?: string; severity?: string; details?: Record<string, any> }) {
-    return this.createSecurityLog({
-      type: event.type,
-      userId: event.userId,
-      ip: event.ip,
-      userAgent: event.userAgent,
-      endpoint: event.endpoint,
-      severity: event.severity ?? 'medium',
-      details: event.details
-    });
-  }
-
-  // ---------------- CHAT ----------------
-  async getActiveChatSession(userId: UserId) {
-    return this.db.query.liveChatSessions.findFirst({
-      where: and(
-        eq(schema.liveChatSessions.userId, userId),
-        or(
-          eq(schema.liveChatSessions.status, 'waiting'),
-          eq(schema.liveChatSessions.status, 'active')
-        )
-      ),
-      orderBy: desc(schema.liveChatSessions.startedAt)
-    });
-  }
-
-  async createChatSession(data: Partial<InsertChatSession>) {
-    if (!data.userId) {
-      throw new Error('userId is required to create a chat session');
-    }
-
-    const values: InsertChatSession = {
-      userId: data.userId!,
-      subject: data.subject,
-      status: data.status ?? 'waiting',
-      agentId: data.agentId,
-      agentName: data.agentName,
-      startedAt: data.startedAt,
-      endedAt: data.endedAt,
-      rating: data.rating,
-      feedback: data.feedback
-    };
-
-    const result = await this.db
-      .insert(schema.liveChatSessions)
-      .values(values)
-      .returning();
-    return result[0];
-  }
+          for (const [key, value] of Object.entries(data)) {
+            await this.db.insert(schema.platformSettings)
+              .values({
+                key,
+                value,
+                updatedAt: new Date()
+              })
+              .onConflictDoUpdate({
+                target: schema.platformSettings.key,
+                set: {
+                  value,
+                  updatedAt: new Date()
+                }
+                  .insert(schema.liveChatSessions)
+                  .values(values)
+                  .returning();
+                return result[0];
+              }
 
   async getChatSession(id: ChatSessionId) {
-    return this.db.query.liveChatSessions.findFirst({
-      where: eq(schema.liveChatSessions.id, id)
-    });
-  }
+                return this.db.query.liveChatSessions.findFirst({
+                  where: eq(schema.liveChatSessions.id, id)
+                });
+              }
 
   async getChatSessions(options: { status?: string; page?: number; limit?: number } = {}) {
-    const { status, page = 1, limit = 20 } = options;
-    const whereClause = status ? eq(schema.liveChatSessions.status, status) : undefined;
-    return this.db.query.liveChatSessions.findMany({
-      where: whereClause,
-      orderBy: desc(schema.liveChatSessions.startedAt),
-      limit,
-      offset: (Math.max(page, 1) - 1) * limit
-    });
-  }
+                const { status, page = 1, limit = 20 } = options;
+                const whereClause = status ? eq(schema.liveChatSessions.status, status) : undefined;
+                return this.db.query.liveChatSessions.findMany({
+                  where: whereClause,
+                  orderBy: desc(schema.liveChatSessions.startedAt),
+                  limit,
+                  offset: (Math.max(page, 1) - 1) * limit
+                });
+              }
 
-  async assignChatSession(sessionId: ChatSessionId, agentId: UserId, agentName?: string) {
-    const result = await this.db
-      .update(schema.liveChatSessions)
-      .set({
-        agentId,
-        agentName,
-        status: 'active',
-        startedAt: new Date()
-      })
-      .where(eq(schema.liveChatSessions.id, sessionId))
-      .returning();
-    return result[0];
-  }
+  async assignChatSession(sessionId: ChatSessionId, agentId: UserId, agentName ?: string) {
+                const result = await this.db
+                  .update(schema.liveChatSessions)
+                  .set({
+                    agentId,
+                    agentName,
+                    status: 'active',
+                    startedAt: new Date()
+                  })
+                  .where(eq(schema.liveChatSessions.id, sessionId))
+                  .returning();
+                return result[0];
+              }
 
-  async updateChatSessionStatus(sessionId: ChatSessionId, status: string, agentId?: UserId) {
-    const updateData: Partial<InsertChatSession> = { status };
-    if (agentId) {
-      updateData.agentId = agentId;
-    }
-    if (status === 'ended') {
-      updateData.endedAt = new Date();
-    }
+  async updateChatSessionStatus(sessionId: ChatSessionId, status: string, agentId ?: UserId) {
+                const updateData: Partial<InsertChatSession> = { status };
+            if (agentId) {
+              updateData.agentId = agentId;
+            }
+            if (status === 'ended') {
+              updateData.endedAt = new Date();
+            }
 
-    const result = await this.db
-      .update(schema.liveChatSessions)
-      .set(updateData)
-      .where(eq(schema.liveChatSessions.id, sessionId))
-      .returning();
-    return result[0];
-  }
+            const result = await this.db
+              .update(schema.liveChatSessions)
+              .set(updateData)
+              .where(eq(schema.liveChatSessions.id, sessionId))
+              .returning();
+            return result[0];
+          }
 
   async endChatSession(sessionId: ChatSessionId) {
-    const result = await this.db
-      .update(schema.liveChatSessions)
-      .set({
-        status: 'ended',
-        endedAt: new Date()
-      })
-      .where(eq(schema.liveChatSessions.id, sessionId))
-      .returning();
-    return result[0];
-  }
+            const result = await this.db
+              .update(schema.liveChatSessions)
+              .set({
+                status: 'ended',
+                endedAt: new Date()
+              })
+              .where(eq(schema.liveChatSessions.id, sessionId))
+              .returning();
+            return result[0];
+          }
 
-  async rateChatSession(sessionId: ChatSessionId, rating: number, feedback?: string) {
-    const result = await this.db
-      .update(schema.liveChatSessions)
-      .set({
-        rating,
-        feedback
-      })
-      .where(eq(schema.liveChatSessions.id, sessionId))
-      .returning();
-    return result[0];
-  }
+  async rateChatSession(sessionId: ChatSessionId, rating: number, feedback ?: string) {
+            const result = await this.db
+              .update(schema.liveChatSessions)
+              .set({
+                rating,
+                feedback
+              })
+              .where(eq(schema.liveChatSessions.id, sessionId))
+              .returning();
+            return result[0];
+          }
 
   async getChatMessages(sessionId: ChatSessionId) {
-    return this.db.query.liveChatMessages.findMany({
-      where: eq(schema.liveChatMessages.sessionId, sessionId),
-      orderBy: asc(schema.liveChatMessages.createdAt)
-    });
-  }
+            return this.db.query.liveChatMessages.findMany({
+              where: eq(schema.liveChatMessages.sessionId, sessionId),
+              orderBy: asc(schema.liveChatMessages.createdAt)
+            });
+          }
 
   async createChatMessage(data: Partial<InsertChatMessage>) {
-    if (!data.sessionId || !data.senderId || !data.message) {
-      throw new Error('sessionId, senderId, and message are required to create a chat message');
-    }
+            if (!data.sessionId || !data.senderId || !data.message) {
+              throw new Error('sessionId, senderId, and message are required to create a chat message');
+            }
 
-    const values: InsertChatMessage = {
-      sessionId: data.sessionId!,
-      senderId: data.senderId!,
-      senderName: data.senderName,
-      senderRole: data.senderRole,
-      message: data.message!,
-      messageType: data.messageType ?? 'text',
-      attachmentUrl: data.attachmentUrl,
-      attachmentName: data.attachmentName,
-      attachmentSize: data.attachmentSize,
-      createdAt: data.createdAt
-    };
+            const values: InsertChatMessage = {
+              sessionId: data.sessionId!,
+              senderId: data.senderId!,
+              senderName: data.senderName,
+              senderRole: data.senderRole,
+              message: data.message!,
+              messageType: data.messageType ?? 'text',
+              attachmentUrl: data.attachmentUrl,
+              attachmentName: data.attachmentName,
+              attachmentSize: data.attachmentSize,
+              createdAt: data.createdAt
+            };
 
-    const result = await this.db
-      .insert(schema.liveChatMessages)
-      .values(values)
-      .returning();
-    return result[0];
-  }
+            const result = await this.db
+              .insert(schema.liveChatMessages)
+              .values(values)
+              .returning();
+            return result[0];
+          }
 
   async notifyAdminsNewChatSession(session: ChatSession) {
-    const admins = await this.db.query.users.findMany({
-      where: eq(schema.users.role, 'admin')
-    });
+            const admins = await this.db.query.users.findMany({
+              where: eq(schema.users.role, 'admin')
+            });
 
-    if (!admins.length) {
-      console.log('New chat session created but no admins found', session.id);
-      return;
-    }
+            if (!admins.length) {
+              console.log('New chat session created but no admins found', session.id);
+              return;
+            }
 
-    const notifications = admins.map((admin) => ({
-      userId: admin.id,
-      type: 'chat',
-      title: 'New live chat request',
-      message: `User ${session.userId} started a chat about "${session.subject || 'support'}"`,
-      read: false
-    }));
+            const notifications = admins.map((admin) => ({
+              userId: admin.id,
+              type: 'chat',
+              title: 'New live chat request',
+              message: `User ${session.userId} started a chat about "${session.subject || 'support'}"`,
+              read: false
+            }));
 
-    await this.db.insert(schema.notifications).values(notifications);
-  }
-}
+            await this.db.insert(schema.notifications).values(notifications);
+          }
+        }
 
-// Export singleton instance
-export const storage = new DatabaseStorage(db);
+        // Export singleton instance
+        export const storage = new DatabaseStorage(db);

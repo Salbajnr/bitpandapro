@@ -747,24 +747,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const portfolio = await storage.getPortfolio(userId);
       if (!portfolio) {
-        return res.status(404).json({ message: "Portfolio not found" });
-      }
-
-      const { type, symbol, amount, price, total, name } = req.body;
-      const tradeData = {
-        userId: req.user!.id,
-        type,
-        symbol,
-        amount,
-        price,
-        total,
-        status: 'completed',
-        name: name || symbol, // Add name to trade data
-      };
-
-      const transaction = await storage.createTransaction(tradeData);
-
-      if (tradeData.type === 'buy') {
         const existing = await storage.getHolding(portfolio.id, tradeData.symbol);
         if (existing) {
           const newAmount = parseFloat(existing.amount) + parseFloat(tradeData.amount);
